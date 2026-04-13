@@ -398,6 +398,6 @@ export async function setGuestCount(orderId: number, guestCount: number) {
 }
 
 export async function getCancellationReasons() {
-  const result = await query('SELECT * FROM cancellation_reasons WHERE is_active = true ORDER BY name');
+  const result = await query('SELECT DISTINCT ON (name) * FROM cancellation_reasons WHERE is_active = true ORDER BY name, id');
   return result.rows;
 }

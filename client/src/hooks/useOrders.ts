@@ -83,7 +83,7 @@ export function useSendToKitchen() {
     onSuccess: (data) => {
       qc.setQueryData(['orders', data.id], data);
       qc.invalidateQueries({ queryKey: ['orders'] });
-      toast.success('Orden enviada a cocina');
+      toast.success('Orden enviada');
     },
   });
 }

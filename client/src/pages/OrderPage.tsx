@@ -635,8 +635,8 @@ export default function OrderPage() {
           <div className="bg-white rounded-xl w-full max-w-sm p-4">
             <h3 className="font-bold mb-3">Cancelar Producto</h3>
             <p className="text-sm text-gray-500 mb-3">Selecciona el motivo de cancelación:</p>
-            <div className="space-y-2 mb-3">
-              {cancellationReasons?.map((r: any) => (
+            <div className="space-y-2 mb-3 max-h-52 overflow-y-auto">
+              {cancellationReasons?.filter((r: any, idx: number, arr: any[]) => arr.findIndex((x: any) => x.name === r.name) === idx).map((r: any) => (
                 <button key={r.id} onClick={() => setCancelReason(r.name)}
                   className={`w-full text-left p-2 rounded-lg border text-sm ${cancelReason === r.name ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:bg-gray-50'}`}>
                   {r.name}

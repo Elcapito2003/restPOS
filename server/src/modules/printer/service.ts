@@ -72,8 +72,19 @@ export async function printComanda(orderId: number) {
   const settings = await getPrinterSettings();
 
   // Group items by printer target
-  const kitchenItems = items.rows.filter((i: any) => i.printer_target === 'kitchen' || i.printer_target === 'both');
-  const barItems = items.rows.filter((i: any) => i.printer_target === 'bar' || i.printer_target === 'both');
+  // Treat NULL printer_target as 'kitchen' (default for products created before migration 017)
+  // If no kitchen printer is configured, redirect kitchen items to bar printer
+  const hasKitchenPrinter = !!resolvePrinterInterface(settings.kitchen);
+  const isKitchenTarget = (i: any) => i.printer_target === 'kitchen' || !i.printer_target;
+  const kitchenItems = hasKitchenPrinter
+    ? items.rows.filter((i: any) => isKitchenTarget(i) || i.printer_target === 'both')
+    : []; // kitchen items will be merged into barItems below
+  const barItems = items.rows.filter((i: any) => {
+    if (i.printer_target === 'bar' || i.printer_target === 'both') return true;
+    // Redirect kitchen items to bar when no kitchen printer is available
+    if (!hasKitchenPrinter && isKitchenTarget(i)) return true;
+    return false;
+  });
 
   const results: any[] = [];
 
