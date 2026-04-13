@@ -69,7 +69,25 @@ export default function PaymentPage() {
         setClosed(true);
         setLastChange(res.data.change || 0);
         toast.success('Pago completado');
-        try { await api.post(`/printer/receipt/${orderId}`); } catch {}
+        // Print receipt locally if in Electron, otherwise use server
+        try {
+          if ((window as any).electronPrint) {
+            const orderRes = await api.get(`/orders/${orderId}`);
+            const orderData = orderRes.data;
+            const paymentsData = (await api.get(`/payments/order/${orderId}`)).data;
+            const settingsRes = await api.get('/settings');
+            const s = settingsRes.data;
+            await (window as any).electronPrint.printReceipt({
+              order: orderData,
+              items: orderData.items?.filter((i: any) => i.status !== 'cancelled') || [],
+              payments: paymentsData,
+              restaurantName: s.restaurant_name || 'Restaurante',
+              printerSettings: { kitchen: s.printer_kitchen_ip || '', bar: s.printer_bar_ip || '', cashier: s.printer_cashier_ip || '' },
+            });
+          } else {
+            await api.post(`/printer/receipt/${orderId}`);
+          }
+        } catch {}
       } else {
         toast.success(`Pago parcial registrado - Resta: ${fmt(res.data.remaining)}`);
         // Reset form for next payment

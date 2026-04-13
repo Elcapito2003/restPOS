@@ -10,6 +10,9 @@
     "build": "electron-builder --win",
     "build:dir": "electron-builder --win --dir"
   },
+  "dependencies": {
+    "node-thermal-printer": "^4.4.2"
+  },
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0"

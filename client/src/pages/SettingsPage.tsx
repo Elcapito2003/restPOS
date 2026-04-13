@@ -26,6 +26,15 @@ export default function SettingsPage() {
 
   const testPrinter = async (target: string) => {
     try {
+      // Use local Electron printing if available
+      if ((window as any).electronPrint) {
+        const address = values[`printer_${target}_ip`] || '';
+        const res = await (window as any).electronPrint.testPrinter({ target, address });
+        if (res.status === 'ok') toast.success(`Impresora ${target} OK`);
+        else if (res.status === 'no_printer') toast('No configurada', { icon: '⚠️' });
+        else toast.error(`Error: ${res.message}`);
+        return;
+      }
       const res = await api.post(`/printer/test/${target}`);
       if (res.data.status === 'ok') toast.success(`Impresora ${target} OK`);
       else if (res.data.status === 'no_printer') toast('No configurada', { icon: '⚠️' });

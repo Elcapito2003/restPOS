@@ -1,8 +1,9 @@
-const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
+const { setupPrintHandlers } = require('./localPrinter');
 
-// Cloud backend URL
-const SERVER_URL = 'https://restpos-production-f38b.up.railway.app';
+// Server URL - uses droplet directly
+const SERVER_URL = 'https://165.227.121.235';
 
 let mainWindow;
 
@@ -18,6 +19,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -52,9 +54,8 @@ function createWindow() {
   ]);
   Menu.setApplicationMenu(menu);
 
-  // Load the cloud app
+  // Load the app
   mainWindow.loadURL(SERVER_URL).catch(() => {
-    // If server is unreachable, show error page
     mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
       <!DOCTYPE html>
       <html>
@@ -79,7 +80,6 @@ function createWindow() {
     `)}`);
   });
 
-  // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(SERVER_URL)) {
       shell.openExternal(url);
@@ -92,6 +92,9 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// Setup local print handlers
+setupPrintHandlers();
 
 app.whenReady().then(createWindow);
 
