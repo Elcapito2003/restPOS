@@ -321,7 +321,25 @@ export default function OrderPage() {
   const actionButtons = [
     { label: 'Enviar', icon: Send, color: 'bg-blue-600 text-white', action: handleSend, disabled: !order?.items?.some((i: any) => i.status === 'pending') },
     { label: 'Cobrar', icon: CreditCard, color: 'bg-emerald-600 text-white', action: () => order && navigate(`/payments?order=${order.id}`), disabled: !order?.items?.length || (order?.status !== 'sent' && order?.status !== 'partial') },
-    { label: 'Imprimir', icon: Printer, color: 'bg-gray-600 text-white', action: () => toast.success('Nota impresa (simulación)') },
+    { label: 'Imprimir', icon: Printer, color: 'bg-gray-600 text-white', action: async () => {
+      if (!order) return;
+      if ((window as any).electronPrint) {
+        try {
+          const settingsRes = await api.get('/settings');
+          const s = settingsRes.data;
+          const printerSettings = { kitchen: s.printer_kitchen_ip || '', bar: s.printer_bar_ip || '', cashier: s.printer_cashier_ip || '' };
+          const items = order.items?.filter((i: any) => i.status !== 'cancelled') || [];
+          const paymentsRes = await api.get(`/payments/order/${order.id}`);
+          await (window as any).electronPrint.printReceipt({
+            order, items, payments: paymentsRes.data,
+            restaurantName: s.restaurant_name || 'Restaurante', printerSettings,
+          });
+          toast.success('Cuenta impresa');
+        } catch (err: any) { toast.error('Error al imprimir: ' + (err.message || '')); }
+      } else {
+        try { await api.post(`/printer/receipt/${order.id}`); toast.success('Cuenta impresa'); } catch { toast.error('Error al imprimir'); }
+      }
+    } },
     { label: 'Descuento', icon: Percent, color: 'bg-amber-500 text-white', action: () => {
       if (isAdminOrManager) { setDiscountAuthorizedBy(currentUser!.id); setShowDiscount(true); }
       else { setShowDiscountAuth(true); }

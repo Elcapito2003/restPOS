@@ -11,7 +11,7 @@ try {
 function resolvePrinterInterface(address) {
   if (!address || !address.trim()) return null;
   const addr = address.trim();
-  if (addr.startsWith('tcp://') || addr.startsWith('printer:') || addr.startsWith('\\\\') || addr.startsWith('/dev')) return addr;
+  if (addr.startsWith('tcp://') || addr.startsWith('printer:') || addr.startsWith('\\\\') || addr.startsWith('//') || addr.startsWith('/dev')) return addr;
   if (/^COM\d+$/i.test(addr)) return `\\\\.\\${addr.toUpperCase()}`;
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(addr)) {
     return `tcp://${addr.includes(':') ? addr : addr + ':9100'}`;
