@@ -58,6 +58,10 @@ export default function SettingsPage() {
   const [scanAssign, setScanAssign] = useState<Record<string, string>>({ kitchen: '', bar: '', cashier: '' });
 
   const handleScan = async () => {
+    if (!canScan) {
+      toast.error('El escaneo automático requiere la app de escritorio RestPOS');
+      return;
+    }
     setScanning(true);
     setScanResults([]);
     setIdentified(false);
@@ -148,14 +152,19 @@ export default function SettingsPage() {
       <div className="card p-4">
         <h3 className="font-bold mb-3 flex items-center gap-2"><Printer size={18} /> Impresoras</h3>
 
-        {/* ─── Auto-detect section (Electron only) ─── */}
-        {canScan && (
-          <div className="mb-4 pb-4 border-b border-gray-200 space-y-3">
-            <button onClick={handleScan} disabled={scanning} className="btn-outline w-full gap-2">
-              {scanning
-                ? <><Loader2 size={18} className="animate-spin" /> Buscando impresoras...</>
-                : <><Search size={18} /> Detectar Impresoras Automáticamente</>}
-            </button>
+        {/* ─── Auto-detect section ─── */}
+        <div className="mb-4 pb-4 border-b border-gray-200 space-y-3">
+          {!canScan && (
+            <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+              El escaneo automático de red funciona desde la app de escritorio RestPOS.
+              Desde el navegador puedes configurar las impresoras manualmente abajo.
+            </p>
+          )}
+          <button onClick={handleScan} disabled={scanning} className="btn-outline w-full gap-2">
+            {scanning
+              ? <><Loader2 size={18} className="animate-spin" /> Buscando impresoras...</>
+              : <><Search size={18} /> Detectar Impresoras Automáticamente</>}
+          </button>
 
             {/* Scan results list */}
             {scanResults.length > 0 && (
@@ -219,12 +228,11 @@ export default function SettingsPage() {
                 )}
               </>
             )}
-          </div>
-        )}
+        </div>
 
         {/* ─── Manual config (always visible) ─── */}
         <p className="text-xs text-gray-500 mb-3">
-          {canScan ? 'O configura manualmente: ' : ''}USB/COM: COM3 &nbsp;|&nbsp; Red: tcp://192.168.1.100:9100 &nbsp;|&nbsp; Nombre Windows: printer:POS-80
+          O configura manualmente: USB/COM: COM3 &nbsp;|&nbsp; Red: tcp://192.168.1.100:9100 &nbsp;|&nbsp; Nombre Windows: printer:POS-80
         </p>
         <div className="space-y-3">
           {[
