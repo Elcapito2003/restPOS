@@ -3,12 +3,15 @@ import { useAuth } from '../context/AuthContext';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { LogOut, ChevronDown } from 'lucide-react';
+import OfflineIndicator from '../components/OfflineIndicator';
+import { useConnectivity } from '../context/ConnectivityContext';
 
 interface SubItem {
   label: string;
   to?: string;
   action?: () => void;
   divider?: boolean;
+  offlineDisabled?: boolean;
 }
 
 interface MenuItem {
@@ -19,6 +22,7 @@ interface MenuItem {
 
 export default function MainLayout() {
   const { user, logout } = useAuth();
+  const { isOnline } = useConnectivity();
   const navigate = useNavigate();
   const location = useLocation();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -88,54 +92,64 @@ export default function MainLayout() {
       label: 'Operaciones',
       roles: ['admin', 'manager'],
       items: [
-        { label: 'Gastos', to: '/gastos' },
+        { label: 'Inventario', to: '/inventario', offlineDisabled: true },
+        { label: 'Producciones', to: '/producciones', offlineDisabled: true },
+        { label: 'Proveedores', to: '/proveedores', offlineDisabled: true },
+        { label: 'Pedidos WhatsApp', to: '/pedidos', offlineDisabled: true },
+        { label: 'Recepciones y Pagos', to: '/recepciones', offlineDisabled: true },
+        { label: 'MercadoLibre', to: '/mercadolibre', offlineDisabled: true },
+        { label: 'Transferencias', to: '/transferencias', offlineDisabled: true },
+        { label: 'Solicitar Transferencia', to: '/solicitar-transferencia', offlineDisabled: true },
         { divider: true, label: '' },
-        { label: 'Editor de Planta', to: '/floor-editor' },
+        { label: 'Gastos', to: '/gastos', offlineDisabled: true },
+        { divider: true, label: '' },
+        { label: 'Asistente AI', to: '/asistente', offlineDisabled: true },
+        { label: 'Editor de Planta', to: '/floor-editor', offlineDisabled: true },
       ],
     },
     {
       label: 'Consultas',
       roles: ['admin', 'manager', 'cashier'],
       items: [
-        { label: 'Monitor de Ventas', to: '/consultas/monitor' },
+        { label: 'Monitor de Ventas', to: '/consultas/monitor', offlineDisabled: true },
         { divider: true, label: '' },
-        { label: 'Cuentas Abiertas', to: '/consultas/abiertas' },
-        { label: 'Cuentas Pagadas', to: '/consultas/pagadas' },
-        { label: 'Cuentas Canceladas', to: '/consultas/canceladas' },
+        { label: 'Cuentas Abiertas', to: '/consultas/abiertas', offlineDisabled: true },
+        { label: 'Cuentas Pagadas', to: '/consultas/pagadas', offlineDisabled: true },
+        { label: 'Cuentas Canceladas', to: '/consultas/canceladas', offlineDisabled: true },
         { divider: true, label: '' },
-        { label: 'Turnos Abiertos', to: '/shifts' },
-        { label: 'Historial de Ventas', to: '/consultas/historial' },
+        { label: 'Turnos Abiertos', to: '/shifts', offlineDisabled: true },
+        { label: 'Historial de Ventas', to: '/consultas/historial', offlineDisabled: true },
       ],
     },
     {
       label: 'Reportes',
       roles: ['admin', 'manager', 'cashier'],
       items: [
-        { label: 'Reporte Diario', to: '/reports/daily' },
-        { label: 'Ventas por Período', to: '/reports/period' },
+        { label: 'Reporte Diario', to: '/reports/daily', offlineDisabled: true },
+        { label: 'Ventas por Período', to: '/reports/period', offlineDisabled: true },
         { divider: true, label: '' },
-        { label: 'Ventas por Mesero', to: '/reports/waiter' },
-        { label: 'Ventas por Categoría', to: '/reports/category' },
-        { label: 'Ventas por Producto', to: '/reports/product' },
-        { label: 'Ventas por Hora', to: '/reports/hourly' },
+        { label: 'Ventas por Mesero', to: '/reports/waiter', offlineDisabled: true },
+        { label: 'Ventas por Categoría', to: '/reports/category', offlineDisabled: true },
+        { label: 'Ventas por Producto', to: '/reports/product', offlineDisabled: true },
+        { label: 'Ventas por Hora', to: '/reports/hourly', offlineDisabled: true },
         { divider: true, label: '' },
-        { label: 'Cancelaciones', to: '/reports/cancellations' },
-        { label: 'Descuentos y Cortesías', to: '/reports/discounts' },
+        { label: 'Cancelaciones', to: '/reports/cancellations', offlineDisabled: true },
+        { label: 'Descuentos y Cortesías', to: '/reports/discounts', offlineDisabled: true },
       ],
     },
     {
       label: 'Seguridad',
       roles: ['admin'],
       items: [
-        { label: 'Perfiles y Permisos', to: '/security' },
-        { label: 'Usuarios', to: '/users' },
+        { label: 'Perfiles y Permisos', to: '/security', offlineDisabled: true },
+        { label: 'Usuarios', to: '/users', offlineDisabled: true },
       ],
     },
     {
       label: 'Mantenimiento',
       roles: ['admin'],
       items: [
-        { label: 'Herramientas', to: '/maintenance' },
+        { label: 'Herramientas', to: '/maintenance', offlineDisabled: true },
       ],
     },
   ];
@@ -166,6 +180,7 @@ export default function MainLayout() {
 
   return (
     <div className="flex flex-col h-screen">
+      <OfflineIndicator />
       {/* Top menu bar - SoftRestaurant style */}
       <header className="bg-slate-800 text-white shrink-0 z-50">
         {/* Brand bar */}
@@ -219,19 +234,25 @@ export default function MainLayout() {
             className="fixed bg-white text-gray-800 shadow-xl border border-gray-200 rounded-b-lg min-w-[220px] z-[999] py-1"
             style={{ top: dropdownPos.top, left: dropdownPos.left }}
           >
-            {activeMenu.items.map((item, idx) => (
-              item.divider ? (
+            {activeMenu.items.map((item, idx) => {
+              const disabled = !isOnline && item.offlineDisabled;
+              return item.divider ? (
                 <div key={idx} className="border-t border-gray-200 my-1" />
               ) : (
                 <button
                   key={idx}
-                  onClick={() => handleItemClick(item)}
-                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                  onClick={() => !disabled && handleItemClick(item)}
+                  disabled={disabled}
+                  className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                    disabled
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'hover:bg-blue-50 hover:text-blue-700'
+                  }`}
                 >
                   {item.label}
                 </button>
-              )
-            ))}
+              );
+            })}
           </div>
         </>,
         document.body

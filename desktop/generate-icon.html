@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate RestPOS Icon</title></head>
+<body>
+<canvas id="c" width="512" height="512"></canvas>
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+
+// Background - rounded square
+ctx.fillStyle = '#2563eb';
+ctx.beginPath();
+ctx.roundRect(0, 0, 512, 512, 80);
+ctx.fill();
+
+// Inner shadow
+const grad = ctx.createLinearGradient(0, 0, 512, 512);
+grad.addColorStop(0, 'rgba(255,255,255,0.15)');
+grad.addColorStop(1, 'rgba(0,0,0,0.1)');
+ctx.fillStyle = grad;
+ctx.beginPath();
+ctx.roundRect(0, 0, 512, 512, 80);
+ctx.fill();
+
+// Letter R
+ctx.fillStyle = '#ffffff';
+ctx.font = 'bold 320px Inter, -apple-system, sans-serif';
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+ctx.fillText('R', 256, 270);
+
+// Download
+const link = document.createElement('a');
+link.download = 'icon.png';
+link.href = c.toDataURL('image/png');
+link.click();
+document.body.innerHTML = '<h1>Icon generated! Save the downloaded icon.png to the desktop/ folder.</h1>';
+</script>
+</body>
+</html>

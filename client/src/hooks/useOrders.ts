@@ -217,6 +217,19 @@ export function useChangeTable() {
   });
 }
 
+export function useTransferItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, target_order_id, item_ids }: { orderId: number; target_order_id: number; item_ids: number[] }) =>
+      api.post(`/orders/${orderId}/transfer-items`, { target_order_id, item_ids }).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders'] });
+      qc.invalidateQueries({ queryKey: ['tables'] });
+      toast.success('Productos traspasados');
+    },
+  });
+}
+
 export function useMergeOrders() {
   const qc = useQueryClient();
   return useMutation({

@@ -6,12 +6,13 @@ import {
   useOrder, useOrderByTable, useCreateOrder, useAddItem, useUpdateItem, useRemoveItem,
   useSendToKitchen, useSetDiscount, useCancelOrder, useCancelItem,
   useChangeWaiter, useChangeTable, useSetTip, useSetObservations, useSetGuestCount,
-  useCancellationReasons, useMergeOrders, useActiveOrders,
+  useCancellationReasons, useMergeOrders, useActiveOrders, useTransferItems,
 } from '../hooks/useOrders';
 import {
   Send, Minus, Plus, Percent, MessageSquare, X, ChevronLeft,
   Ban, UserCheck, ArrowRightLeft, Users, FileText, DollarSign,
-  Merge, Printer, CreditCard, ShieldCheck, Check, Keyboard
+  Merge, Printer, CreditCard, ShieldCheck, Check, Keyboard,
+  PackageCheck, Repeat,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ORDER_ITEM_STATUS } from '../config/constants';
@@ -155,6 +156,7 @@ export default function OrderPage() {
   const setObservations = useSetObservations();
   const setGuestCount = useSetGuestCount();
   const mergeOrders = useMergeOrders();
+  const transferItems = useTransferItems();
   const { data: cancellationReasons } = useCancellationReasons();
   const { data: activeOrders } = useActiveOrders();
 
@@ -216,6 +218,10 @@ export default function OrderPage() {
   const [showGuests, setShowGuests] = useState(false);
   const [guestValue, setGuestValue] = useState('');
   const [showMerge, setShowMerge] = useState(false);
+  const [showTransferItems, setShowTransferItems] = useState(false);
+  const [transferSelectedItems, setTransferSelectedItems] = useState<number[]>([]);
+  const [transferStep, setTransferStep] = useState<'select' | 'destination'>('select');
+  const [showQuickReorder, setShowQuickReorder] = useState(false);
 
 
   // Auto-create order for table mode
@@ -350,6 +356,8 @@ export default function OrderPage() {
     { label: 'Cambiar Mesero', icon: UserCheck, color: 'bg-sky-500 text-white', action: () => setShowChangeWaiter(true) },
     ...(!isQuickMode ? [{ label: 'Cambiar Mesa', icon: ArrowRightLeft, color: 'bg-orange-500 text-white', action: () => setShowChangeTable(true) }] : []),
     { label: 'Juntar', icon: Merge, color: 'bg-violet-500 text-white', action: () => setShowMerge(true) },
+    { label: 'Traspasar', icon: PackageCheck, color: 'bg-cyan-600 text-white', action: () => { setTransferSelectedItems([]); setTransferStep('select'); setShowTransferItems(true); }, disabled: !order?.items?.some((i: any) => i.status !== 'cancelled') },
+    { label: 'Repetir', icon: Repeat, color: 'bg-lime-600 text-white', action: () => setShowQuickReorder(true), disabled: !order?.items?.some((i: any) => ['sent', 'preparing', 'ready', 'delivered'].includes(i.status)) },
     { label: 'Cancelar', icon: Ban, color: 'bg-red-600 text-white', action: () => setShowCancelOrder(true) },
   ];
 
@@ -786,6 +794,109 @@ export default function OrderPage() {
               )}
             </div>
             <button onClick={() => setShowMerge(false)} className="btn-secondary w-full mt-3">Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Items Modal */}
+      {showTransferItems && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm p-4">
+            {transferStep === 'select' ? (
+              <>
+                <h3 className="font-bold mb-3">Traspasar Productos</h3>
+                <p className="text-sm text-gray-500 mb-3">Selecciona los productos a traspasar:</p>
+                <div className="space-y-2 max-h-60 overflow-auto">
+                  {order?.items?.filter((i: any) => i.status !== 'cancelled').map((item: any) => (
+                    <label key={item.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${transferSelectedItems.includes(item.id) ? 'border-cyan-500 bg-cyan-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                      <input type="checkbox" checked={transferSelectedItems.includes(item.id)}
+                        onChange={() => setTransferSelectedItems(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id])}
+                        className="w-4 h-4 text-cyan-600 rounded" />
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-sm">{item.product_name}</span>
+                        <span className="text-gray-500 text-sm ml-2">x{item.quantity}</span>
+                      </div>
+                      <span className="text-sm font-medium">${((parseFloat(item.unit_price) + (item.modifiers?.reduce((s: number, m: any) => s + parseFloat(m.price_extra || 0), 0) || 0)) * item.quantity).toFixed(2)}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => setShowTransferItems(false)} className="btn-secondary flex-1">Cancelar</button>
+                  <button onClick={() => setTransferStep('destination')} disabled={transferSelectedItems.length === 0}
+                    className="btn-primary flex-1 disabled:opacity-40">Siguiente</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="font-bold mb-3">Selecciona Destino</h3>
+                <p className="text-sm text-gray-500 mb-3">{transferSelectedItems.length} producto(s) seleccionado(s). ¿A qué cuenta los mueves?</p>
+                <div className="space-y-2 max-h-60 overflow-auto">
+                  {activeOrders?.filter((o: any) => o.id !== order?.id).map((o: any) => (
+                    <button key={o.id} onClick={() => {
+                      transferItems.mutate({ orderId: order!.id, target_order_id: o.id, item_ids: transferSelectedItems }, {
+                        onSuccess: () => { setShowTransferItems(false); setTransferSelectedItems([]); refetchOrder(); },
+                      });
+                    }} className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-cyan-50">
+                      <span className="font-medium">{o.table_label || 'Sin mesa'} #{o.daily_number}</span>
+                      <span className="text-gray-500 text-sm ml-2">${parseFloat(o.total).toFixed(2)}</span>
+                    </button>
+                  ))}
+                  {(!activeOrders || activeOrders.filter((o: any) => o.id !== order?.id).length === 0) && (
+                    <p className="text-center text-gray-400 text-sm py-4">No hay otras cuentas abiertas</p>
+                  )}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => setTransferStep('select')} className="btn-secondary flex-1">Atrás</button>
+                  <button onClick={() => setShowTransferItems(false)} className="btn-secondary flex-1">Cancelar</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Quick Reorder Modal */}
+      {showQuickReorder && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm p-4">
+            <h3 className="font-bold mb-3">Repetir Producto</h3>
+            <p className="text-sm text-gray-500 mb-3">Toca un producto para agregarlo de nuevo:</p>
+            <div className="space-y-2 max-h-60 overflow-auto">
+              {order?.items?.filter((i: any) => ['sent', 'preparing', 'ready', 'delivered'].includes(i.status))
+                .reduce((unique: any[], item: any) => {
+                  if (!unique.some((u: any) => u.product_id === item.product_id && JSON.stringify(u.modifiers?.map((m: any) => m.modifier_id).sort()) === JSON.stringify(item.modifiers?.map((m: any) => m.modifier_id).sort()))) {
+                    unique.push(item);
+                  }
+                  return unique;
+                }, [])
+                .map((item: any) => (
+                <button key={item.id} onClick={() => {
+                  addItem.mutate({
+                    orderId: order!.id,
+                    product_id: item.product_id,
+                    notes: item.notes || undefined,
+                    modifiers: item.modifiers?.map((m: any) => ({ modifier_id: m.modifier_id })) || [],
+                  }, {
+                    onSuccess: () => { setShowQuickReorder(false); refetchOrder(); toast.success(`${item.product_name} agregado`); },
+                  });
+                }} className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-lime-50 hover:border-lime-400 transition-colors">
+                  <div className="flex justify-between items-center">
+                    <div className="min-w-0">
+                      <span className="font-medium text-sm">{item.product_name}</span>
+                      {item.modifiers?.length > 0 && (
+                        <span className="text-xs text-gray-500 block">{item.modifiers.map((m: any) => m.modifier_name).join(', ')}</span>
+                      )}
+                      {item.notes && <span className="text-xs text-amber-600 block">* {item.notes}</span>}
+                    </div>
+                    <span className="text-sm font-medium text-lime-700">${parseFloat(item.unit_price).toFixed(2)}</span>
+                  </div>
+                </button>
+              ))}
+              {!order?.items?.some((i: any) => ['sent', 'preparing', 'ready', 'delivered'].includes(i.status)) && (
+                <p className="text-center text-gray-400 text-sm py-4">No hay productos enviados para repetir</p>
+              )}
+            </div>
+            <button onClick={() => setShowQuickReorder(false)} className="btn-secondary w-full mt-3">Cerrar</button>
           </div>
         </div>
       )}

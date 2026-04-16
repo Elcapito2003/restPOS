@@ -1,8 +1,13 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { ConnectivityProvider } from './context/ConnectivityContext';
+import { installOfflineInterceptor } from './offline/offlineInterceptor';
+
+// Install offline interceptor on startup
+installOfflineInterceptor();
 import MainLayout from './layouts/MainLayout';
 import AuthLayout from './layouts/AuthLayout';
 import LoginPage from './pages/LoginPage';
@@ -37,6 +42,15 @@ import SettingsPage from './pages/SettingsPage';
 import MaintenancePage from './pages/MaintenancePage';
 import HomePage from './pages/HomePage';
 import DiscountPresetsPage from './pages/DiscountPresetsPage';
+import ProveedoresPage from './pages/ProveedoresPage';
+import InventarioPage from './pages/InventarioPage';
+import PedidosPage from './pages/PedidosPage';
+import MercadoLibrePage from './pages/MercadoLibrePage';
+import TransferenciasPage from './pages/TransferenciasPage';
+import SolicitarTransferenciaPage from './pages/SolicitarTransferenciaPage';
+import AsistentePage from './pages/AsistentePage';
+import RecepcionPage from './pages/RecepcionPage';
+import ProduccionesPage from './pages/ProduccionesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,11 +72,15 @@ function R({ roles, children }: { roles: string[]; children: React.ReactNode }) 
   return <ProtectedRoute roles={roles}>{children}</ProtectedRoute>;
 }
 
+const isElectron = !!(window as any).restpos?.isElectron;
+const Router = isElectron ? HashRouter : BrowserRouter;
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <Router>
         <AuthProvider>
+          <ConnectivityProvider>
           <SocketProvider>
             <Routes>
               {/* Auth */}
@@ -98,6 +116,15 @@ export default function App() {
                 {/* Operaciones */}
                 <Route path="/gastos" element={<R roles={['admin','manager','cashier']}><GastosPage /></R>} />
                 <Route path="/descuentos" element={<R roles={['admin','manager']}><DiscountPresetsPage /></R>} />
+                <Route path="/proveedores" element={<R roles={['admin','manager']}><ProveedoresPage /></R>} />
+                <Route path="/inventario" element={<R roles={['admin','manager','cashier']}><InventarioPage /></R>} />
+                <Route path="/pedidos" element={<R roles={['admin','manager']}><PedidosPage /></R>} />
+                <Route path="/mercadolibre" element={<R roles={['admin','manager']}><MercadoLibrePage /></R>} />
+                <Route path="/transferencias" element={<R roles={['admin']}><TransferenciasPage /></R>} />
+                <Route path="/solicitar-transferencia" element={<R roles={['admin','manager']}><SolicitarTransferenciaPage /></R>} />
+                <Route path="/asistente" element={<R roles={['admin','manager']}><AsistentePage /></R>} />
+                <Route path="/recepciones" element={<R roles={['admin','manager']}><RecepcionPage /></R>} />
+                <Route path="/producciones" element={<R roles={['admin','manager']}><ProduccionesPage /></R>} />
 
                 {/* Consultas */}
                 <Route path="/consultas/monitor" element={<R roles={['admin','manager','cashier']}><SalesMonitorPage /></R>} />
@@ -134,8 +161,9 @@ export default function App() {
             </Routes>
             <Toaster position="top-right" toastOptions={{ duration: 3000, style: { minHeight: '44px' } }} />
           </SocketProvider>
+          </ConnectivityProvider>
         </AuthProvider>
-      </BrowserRouter>
+      </Router>
     </QueryClientProvider>
   );
 }

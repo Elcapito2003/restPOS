@@ -40,6 +40,16 @@ export async function processPayment(cashierId: number, data: {
         try { getIO().to(`floor:${table.floor_id}`).emit('table:status_changed', table); } catch {}
       }
       try { getIO().emit('order:closed', { id: data.order_id }); } catch {}
+
+      // Auto-deduct inventory for recipe-based products (after commit, separate transaction)
+      setTimeout(async () => {
+        try {
+          const { deductForOrder } = await import('../productRecipes/service');
+          await deductForOrder(data.order_id);
+        } catch (err: any) {
+          console.error('[AUTO-DEDUCT] Failed for order', data.order_id, err.message);
+        }
+      }, 0);
     } else {
       await client.query(`UPDATE orders SET status = 'partial', updated_at = NOW() WHERE id = $1`, [data.order_id]);
     }

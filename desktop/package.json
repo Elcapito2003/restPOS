@@ -1,6 +1,6 @@
 {
   "name": "restpos",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "RestPOS - Sistema Punto de Venta para Restaurantes",
   "main": "main.js",
   "author": "RestPOS",
@@ -23,11 +23,24 @@
     "directories": {
       "output": "dist"
     },
+    "extraResources": [
+      {
+        "from": "../client/dist",
+        "to": "client"
+      }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.png"
+    ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "signAndEditExecutable": false,
@@ -39,6 +52,14 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "RestPOS"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Elcapito2003",
+      "repo": "restPOS"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
   }
 }

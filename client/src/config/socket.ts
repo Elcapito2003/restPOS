@@ -1,10 +1,12 @@
 import { io, Socket } from 'socket.io-client';
+import { serverUrl } from './api';
 
 let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(window.location.origin, {
+    const url = serverUrl || window.location.origin;
+    socket = io(url, {
       autoConnect: false,
     });
   }
