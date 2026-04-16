@@ -14,5 +14,7 @@ contextBridge.exposeInMainWorld('electronPrint', {
   printComanda: (data) => ipcRenderer.invoke('print:comanda', data),
   printReceipt: (data) => ipcRenderer.invoke('print:receipt', data),
   testPrinter: (target) => ipcRenderer.invoke('print:test', target),
+  scanPrinters: () => ipcRenderer.invoke('printer:scan'),
+  identifyPrinter: (data) => ipcRenderer.invoke('printer:identify', data),
   isElectron: true,
 });

@@ -1,4 +1,7 @@
 const { ipcMain } = require('electron');
+const net = require('net');
+const os = require('os');
+const { execSync } = require('child_process');
 
 let ThermalPrinter, PrinterTypes;
 try {
@@ -231,6 +234,90 @@ function setupPrintHandlers() {
     } catch (err) {
       return { status: 'error', message: err.message };
     }
+  });
+
+  // ─── Printer Scanner ───
+
+  ipcMain.handle('printer:scan', async () => {
+    // 1) Get local subnets
+    const interfaces = os.networkInterfaces();
+    const subnets = [];
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          const parts = iface.address.split('.');
+          subnets.push({ base: `${parts[0]}.${parts[1]}.${parts[2]}`, localIp: iface.address });
+        }
+      }
+    }
+
+    // 2) Scan port 9100 on each subnet
+    const networkPrinters = [];
+    for (const subnet of subnets) {
+      const BATCH = 50;
+      for (let start = 1; start <= 254; start += BATCH) {
+        const promises = [];
+        for (let i = start; i < Math.min(start + BATCH, 255); i++) {
+          const ip = `${subnet.base}.${i}`;
+          if (ip === subnet.localIp) continue;
+          promises.push(new Promise((resolve) => {
+            const socket = new net.Socket();
+            socket.setTimeout(600);
+            socket.on('connect', () => { socket.destroy(); resolve(ip); });
+            socket.on('timeout', () => { socket.destroy(); resolve(null); });
+            socket.on('error',   () => { socket.destroy(); resolve(null); });
+            socket.connect(9100, ip);
+          }));
+        }
+        const results = await Promise.all(promises);
+        networkPrinters.push(...results.filter(Boolean));
+      }
+    }
+
+    // 3) Get Windows installed printers
+    let localPrinters = [];
+    try {
+      const out = execSync(
+        'powershell -Command "Get-Printer | Select-Object Name, PortName, DriverName | ConvertTo-Json -Compress"',
+        { encoding: 'utf-8', timeout: 10000 }
+      );
+      const parsed = JSON.parse(out);
+      localPrinters = (Array.isArray(parsed) ? parsed : [parsed]).filter(p => p && p.Name);
+    } catch (e) {
+      console.error('[SCANNER] Windows printers error:', e.message);
+    }
+
+    console.log(`[SCANNER] Found ${networkPrinters.length} network, ${localPrinters.length} local`);
+    return { network: networkPrinters, local: localPrinters };
+  });
+
+  // ─── Printer Identification (print a big number) ───
+
+  ipcMain.handle('printer:identify', async (_event, { address, number }) => {
+    const iface = resolvePrinterInterface(address);
+    if (!iface) throw new Error('Dirección inválida');
+
+    const printer = createPrinter(iface);
+    printer.alignCenter();
+    printer.drawLine();
+    printer.newLine();
+    printer.setTextSize(3, 3);
+    printer.bold(true);
+    printer.println(`# ${number}`);
+    printer.setTextNormal();
+    printer.bold(false);
+    printer.newLine();
+    printer.bold(true);
+    printer.println('IMPRESORA');
+    printer.bold(false);
+    printer.println(address);
+    printer.newLine();
+    printer.println('RestPOS - Configuracion');
+    printer.println(new Date().toLocaleString('es-MX'));
+    printer.drawLine();
+    printer.cut();
+    await printer.execute();
+    return { status: 'ok' };
   });
 
   console.log('[LOCAL-PRINTER] Print handlers registered');

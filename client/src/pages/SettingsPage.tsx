@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../config/api';
 import toast from 'react-hot-toast';
-import { Save, Printer, Building } from 'lucide-react';
+import { Save, Printer, Building, Search, Loader2, Check, Hash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function SettingsPage() {
@@ -48,6 +48,71 @@ export default function SettingsPage() {
     setValues(prev => ({ ...prev, [key]: value }));
   };
 
+  // ─── Printer scanner state ───
+  const canScan = !!(window as any).electronPrint?.scanPrinters;
+  const [scanResults, setScanResults] = useState<{ id: number; type: 'network' | 'local'; address: string; name: string }[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [identifying, setIdentifying] = useState(false);
+  const [identified, setIdentified] = useState(false);
+  const [identifyStatus, setIdentifyStatus] = useState<Record<number, boolean>>({});
+  const [scanAssign, setScanAssign] = useState<Record<string, string>>({ kitchen: '', bar: '', cashier: '' });
+
+  const handleScan = async () => {
+    setScanning(true);
+    setScanResults([]);
+    setIdentified(false);
+    setIdentifyStatus({});
+    setScanAssign({ kitchen: '', bar: '', cashier: '' });
+    try {
+      const res = await (window as any).electronPrint.scanPrinters();
+      const list: typeof scanResults = [];
+      let id = 1;
+      for (const ip of (res.network || [])) {
+        list.push({ id: id++, type: 'network', address: `tcp://${ip}:9100`, name: ip });
+      }
+      for (const p of (res.local || [])) {
+        list.push({ id: id++, type: 'local', address: `printer:${p.Name}`, name: p.Name });
+      }
+      setScanResults(list);
+      if (list.length === 0) toast('No se encontraron impresoras', { icon: '⚠️' });
+      else toast.success(`${list.length} impresora(s) detectada(s)`);
+    } catch {
+      toast.error('Error al escanear');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleIdentify = async () => {
+    setIdentifying(true);
+    const status: Record<number, boolean> = {};
+    for (const p of scanResults) {
+      try {
+        await (window as any).electronPrint.identifyPrinter({ address: p.address, number: p.id });
+        status[p.id] = true;
+      } catch {
+        status[p.id] = false;
+      }
+    }
+    setIdentifyStatus(status);
+    setIdentified(true);
+    setIdentifying(false);
+    const ok = Object.values(status).filter(Boolean).length;
+    const fail = Object.values(status).filter(v => !v).length;
+    if (fail > 0) toast.error(`${fail} impresora(s) no respondieron`);
+    else toast.success(`Número impreso en ${ok} impresora(s)`);
+  };
+
+  const assignPrinter = (role: string, printerId: string) => {
+    setScanAssign(prev => ({ ...prev, [role]: printerId }));
+    if (!printerId) {
+      setValue(`printer_${role}_ip`, '');
+    } else {
+      const printer = scanResults.find(p => p.id === parseInt(printerId));
+      if (printer) setValue(`printer_${role}_ip`, printer.address);
+    }
+  };
+
   if (isLoading) return <div className="flex items-center justify-center h-full">Cargando...</div>;
 
   return (
@@ -82,8 +147,84 @@ export default function SettingsPage() {
       {/* Printers */}
       <div className="card p-4">
         <h3 className="font-bold mb-3 flex items-center gap-2"><Printer size={18} /> Impresoras</h3>
+
+        {/* ─── Auto-detect section (Electron only) ─── */}
+        {canScan && (
+          <div className="mb-4 pb-4 border-b border-gray-200 space-y-3">
+            <button onClick={handleScan} disabled={scanning} className="btn-outline w-full gap-2">
+              {scanning
+                ? <><Loader2 size={18} className="animate-spin" /> Buscando impresoras...</>
+                : <><Search size={18} /> Detectar Impresoras Automáticamente</>}
+            </button>
+
+            {/* Scan results list */}
+            {scanResults.length > 0 && (
+              <>
+                <p className="text-sm font-medium text-gray-700">{scanResults.length} impresora(s) detectada(s):</p>
+                <div className="space-y-1.5">
+                  {scanResults.map(p => (
+                    <div key={p.id} className="flex items-center gap-2 text-sm bg-gray-50 rounded-lg px-3 py-2">
+                      <span className="font-bold text-blue-600 w-6">#{p.id}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${p.type === 'network' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                        {p.type === 'network' ? 'Red' : 'Local'}
+                      </span>
+                      <span className="text-gray-700 truncate">{p.name}</span>
+                      {identified && (
+                        identifyStatus[p.id]
+                          ? <Check size={14} className="text-green-500 ml-auto shrink-0" />
+                          : <span className="text-red-500 text-xs ml-auto shrink-0">Sin respuesta</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Identify button */}
+                <button onClick={handleIdentify} disabled={identifying} className="btn-outline w-full gap-2">
+                  {identifying
+                    ? <><Loader2 size={18} className="animate-spin" /> Imprimiendo números...</>
+                    : <><Hash size={18} /> {identified ? 'Reimprimir Números' : 'Imprimir Número en Cada Impresora'}</>}
+                </button>
+
+                {/* Assignment dropdowns */}
+                {identified && (
+                  <>
+                    <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">
+                      <strong>Revisa cada impresora</strong> — cada una imprimió un número grande.
+                      Selecciona qué número corresponde a cada destino:
+                    </div>
+                    <div className="space-y-2">
+                      {([
+                        { role: 'kitchen', label: 'Cocina' },
+                        { role: 'bar', label: 'Bar' },
+                        { role: 'cashier', label: 'Caja / Recibos' },
+                      ] as const).map(r => (
+                        <div key={r.role} className="flex items-center gap-2">
+                          <label className="text-sm font-medium w-28 shrink-0">{r.label}:</label>
+                          <select
+                            className="input flex-1"
+                            value={scanAssign[r.role]}
+                            onChange={e => assignPrinter(r.role, e.target.value)}
+                          >
+                            <option value="">— No asignar —</option>
+                            {scanResults.map(p => (
+                              <option key={p.id} value={p.id}>
+                                #{p.id} — {p.name} ({p.type === 'network' ? 'Red' : 'Local'})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ─── Manual config (always visible) ─── */}
         <p className="text-xs text-gray-500 mb-3">
-          USB/COM: COM3 &nbsp;|&nbsp; Red: tcp://192.168.1.100:9100 &nbsp;|&nbsp; Nombre Windows: printer:POS-80
+          {canScan ? 'O configura manualmente: ' : ''}USB/COM: COM3 &nbsp;|&nbsp; Red: tcp://192.168.1.100:9100 &nbsp;|&nbsp; Nombre Windows: printer:POS-80
         </p>
         <div className="space-y-3">
           {[
