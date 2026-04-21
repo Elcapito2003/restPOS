@@ -1,4 +1,5 @@
 import { query } from '../../config/database';
+import { syncAllowlistSafe } from './openclawSync';
 
 export async function getAll() {
   const result = await query(
@@ -34,6 +35,7 @@ export async function create(data: {
      data.email || null, data.whatsapp || null, data.notes || null,
      data.shipping_cost || 0, data.free_shipping_min || 0]
   );
+  void syncAllowlistSafe();
   return result.rows[0];
 }
 
@@ -48,11 +50,13 @@ export async function update(id: number, data: Record<string, any>) {
     `UPDATE suppliers SET ${sets} WHERE id = $1 RETURNING *`,
     [id, ...values]
   );
+  void syncAllowlistSafe();
   return result.rows[0];
 }
 
 export async function remove(id: number) {
   await query('UPDATE suppliers SET is_active = false WHERE id = $1', [id]);
+  void syncAllowlistSafe();
 }
 
 export async function getSupplierItems(supplierId: number) {
