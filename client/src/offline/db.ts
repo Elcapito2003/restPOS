@@ -79,6 +79,7 @@ export interface MetaEntry {
 class RestPOSOfflineDB extends Dexie {
   products!: Table<CachedProduct>;
   categories!: Table<CachedCategory>;
+  // @ts-expect-error — override Dexie's inherited `tables: Table[]` with our Table<CachedTable>
   tables!: Table<CachedTable>;
   floors!: Table<CachedFloor>;
   users!: Table<CachedUser>;
