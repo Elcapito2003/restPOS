@@ -19,7 +19,8 @@
       },
       "package": "com.restpos.comandero",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true
     },
     "ios": {
       "supportsTablet": true,

@@ -19,8 +19,19 @@ export default function LicenseEntryScreen() {
       const res = await redeemLicense(clean);
       await saveTenant(res.tenant);
     } catch (e: any) {
-      const msg = e?.response?.data?.error || e.message || 'No se pudo validar';
-      Alert.alert('Licencia inválida', msg);
+      let title = 'No se pudo activar';
+      let msg = '';
+      if (e?.response?.data?.error) {
+        msg = e.response.data.error;
+        title = 'Licencia inválida';
+      } else if (e?.code === 'ECONNABORTED' || e?.message?.includes('timeout')) {
+        msg = 'El servidor no respondió a tiempo. Revisa tu conexión.';
+      } else if (e?.message === 'Network Error') {
+        msg = 'Sin conexión al servidor. Revisa que tengas internet.';
+      } else {
+        msg = e?.message || 'Error desconocido';
+      }
+      Alert.alert(title, msg);
     } finally {
       setLoading(false);
     }
