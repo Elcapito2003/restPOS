@@ -18,6 +18,8 @@ export const env = {
   banregioUser: process.env.BANREGIO_USER || '',
   banregioPass: process.env.BANREGIO_PASS || '',
   banregioUrl: process.env.BANREGIO_URL || 'https://empresarial.banregio.com',
+  masterDatabaseUrl: process.env.MASTER_DATABASE_URL || 'postgresql://restpos:restpos2026secure@localhost:5432/restpos_master',
+  superAdminJwtSecret: process.env.SUPER_ADMIN_JWT_SECRET || 'sa-dev-secret-change-in-production',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   mlClientId: process.env.ML_CLIENT_ID || '5394522073489421',
   mlClientSecret: process.env.ML_CLIENT_SECRET || 'unRiv0lS950eTawpkBIbDt5S3d2rsRR4',

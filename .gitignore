@@ -5,3 +5,5 @@ dist/
 server/.banregio-session/
 server/.ml-session/
 desktop/dist/
+.claude/
+**/.claude/

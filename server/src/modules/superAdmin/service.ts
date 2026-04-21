@@ -1,0 +1,274 @@
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import * as OTPAuth from 'otpauth';
+import QRCode from 'qrcode';
+import { masterQuery } from '../../multi-tenant/masterDb';
+import { env } from '../../config/env';
+
+const JWT_SECRET = env.superAdminJwtSecret;
+
+// ─── Auth ───
+
+export async function login(email: string, password: string) {
+  const result = await masterQuery(
+    'SELECT * FROM super_admins WHERE email = $1 AND is_active = true', [email]
+  );
+  if (result.rows.length === 0) throw new Error('Credenciales incorrectas');
+
+  const admin = result.rows[0];
+  const valid = await bcrypt.compare(password, admin.password_hash);
+  if (!valid) throw new Error('Credenciales incorrectas');
+
+  if (admin.totp_enabled) {
+    // Return temp token for 2FA verification
+    const tempToken = jwt.sign(
+      { adminId: admin.id, purpose: '2fa-pending' },
+      JWT_SECRET,
+      { expiresIn: '5m' }
+    );
+    return { requires2FA: true, tempToken };
+  }
+
+  // No 2FA — issue full token
+  return issueToken(admin);
+}
+
+export async function verify2FA(tempToken: string, code: string) {
+  let payload: any;
+  try {
+    payload = jwt.verify(tempToken, JWT_SECRET);
+  } catch {
+    throw new Error('Token expirado. Inicia sesión de nuevo.');
+  }
+  if (payload.purpose !== '2fa-pending') throw new Error('Token inválido');
+
+  const result = await masterQuery('SELECT * FROM super_admins WHERE id = $1', [payload.adminId]);
+  if (result.rows.length === 0) throw new Error('Admin no encontrado');
+
+  const admin = result.rows[0];
+  const totp = new OTPAuth.TOTP({
+    issuer: 'restPOS',
+    label: admin.email,
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromBase32(admin.totp_secret),
+  });
+
+  const valid = totp.validate({ token: code, window: 1 });
+  if (valid === null) throw new Error('Código 2FA incorrecto');
+
+  return issueToken(admin);
+}
+
+function issueToken(admin: any) {
+  const token = jwt.sign(
+    { adminId: admin.id, email: admin.email, role: 'super_admin' },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+
+  // Update last login
+  masterQuery('UPDATE super_admins SET last_login_at = NOW() WHERE id = $1', [admin.id]);
+
+  return {
+    token,
+    admin: { id: admin.id, email: admin.email, display_name: admin.display_name, totp_enabled: admin.totp_enabled },
+  };
+}
+
+// ─── 2FA Setup ───
+
+export async function setup2FA(adminId: number) {
+  const result = await masterQuery('SELECT email FROM super_admins WHERE id = $1', [adminId]);
+  if (result.rows.length === 0) throw new Error('Admin no encontrado');
+
+  const secret = new OTPAuth.Secret({ size: 20 });
+  const totp = new OTPAuth.TOTP({
+    issuer: 'restPOS',
+    label: result.rows[0].email,
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+    secret,
+  });
+
+  const uri = totp.toString();
+  const qrCodeUrl = await QRCode.toDataURL(uri);
+
+  // Save secret (not yet enabled until confirmed)
+  await masterQuery('UPDATE super_admins SET totp_secret = $1 WHERE id = $2', [secret.base32, adminId]);
+
+  return { secret: secret.base32, qrCodeUrl, uri };
+}
+
+export async function confirm2FA(adminId: number, code: string) {
+  const result = await masterQuery('SELECT totp_secret FROM super_admins WHERE id = $1', [adminId]);
+  if (result.rows.length === 0) throw new Error('Admin no encontrado');
+  if (!result.rows[0].totp_secret) throw new Error('Primero genera el código QR');
+
+  const totp = new OTPAuth.TOTP({
+    issuer: 'restPOS',
+    label: 'restPOS',
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromBase32(result.rows[0].totp_secret),
+  });
+
+  const valid = totp.validate({ token: code, window: 1 });
+  if (valid === null) throw new Error('Código incorrecto. Intenta de nuevo.');
+
+  await masterQuery('UPDATE super_admins SET totp_enabled = true WHERE id = $1', [adminId]);
+  return { success: true };
+}
+
+// ─── Tenants CRUD ───
+
+export async function getTenants() {
+  const result = await masterQuery(`
+    SELECT t.*,
+      (SELECT license_code FROM licenses WHERE tenant_id = t.id AND status = 'active' LIMIT 1) as license_code,
+      (SELECT plan FROM licenses WHERE tenant_id = t.id AND status = 'active' LIMIT 1) as plan,
+      (SELECT json_agg(json_build_object('module_id', tm.module_id, 'enabled', tm.enabled))
+       FROM tenant_modules tm WHERE tm.tenant_id = t.id) as modules
+    FROM tenants t ORDER BY t.name
+  `);
+  return result.rows;
+}
+
+export async function getTenant(id: string) {
+  const result = await masterQuery(`
+    SELECT t.*,
+      (SELECT license_code FROM licenses WHERE tenant_id = t.id AND status = 'active' LIMIT 1) as license_code,
+      (SELECT plan FROM licenses WHERE tenant_id = t.id AND status = 'active' LIMIT 1) as plan,
+      (SELECT json_agg(json_build_object('module_id', tm.module_id, 'enabled', tm.enabled))
+       FROM tenant_modules tm WHERE tm.tenant_id = t.id) as modules
+    FROM tenants t WHERE t.id = $1
+  `, [id]);
+  return result.rows[0];
+}
+
+export async function createTenant(data: {
+  name: string; slug: string; latitude?: number; longitude?: number;
+  address?: string; city?: string; state?: string;
+  owner_name?: string; owner_phone?: string; owner_email?: string;
+}) {
+  const dbName = `restpos_tenant_${data.slug.replace(/[^a-z0-9_]/g, '_')}`;
+
+  const result = await masterQuery(
+    `INSERT INTO tenants (name, slug, db_name, latitude, longitude, address, city, state, owner_name, owner_phone, owner_email)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [data.name, data.slug, dbName, data.latitude || null, data.longitude || null,
+     data.address || null, data.city || null, data.state || null,
+     data.owner_name || null, data.owner_phone || null, data.owner_email || null]
+  );
+  return result.rows[0];
+}
+
+export async function updateTenant(id: string, data: Record<string, any>) {
+  const allowed = ['name', 'latitude', 'longitude', 'address', 'city', 'state',
+    'owner_name', 'owner_phone', 'owner_email', 'status', 'timezone', 'logo_url'];
+  const fields = Object.keys(data).filter(k => allowed.includes(k) && data[k] !== undefined);
+  if (fields.length === 0) return getTenant(id);
+
+  const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
+  const values = fields.map(f => data[f]);
+  await masterQuery(`UPDATE tenants SET ${sets}, updated_at = NOW() WHERE id = $1`, [id, ...values]);
+  return getTenant(id);
+}
+
+// ─── Module Permissions ───
+
+export async function getModules() {
+  const result = await masterQuery('SELECT * FROM modules ORDER BY sort_order');
+  return result.rows;
+}
+
+export async function setModulePermission(tenantId: string, moduleId: string, enabled: boolean, adminId: number) {
+  await masterQuery(
+    `INSERT INTO tenant_modules (tenant_id, module_id, enabled, enabled_by, enabled_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (tenant_id, module_id) DO UPDATE SET enabled = $3, enabled_by = $4, enabled_at = NOW()`,
+    [tenantId, moduleId, enabled, adminId]
+  );
+}
+
+// ─── Licenses ───
+
+export async function generateLicense(tenantId: string, data: {
+  plan?: string; monthly_price?: number; months?: number;
+}) {
+  const crypto = require('crypto');
+  const code = crypto.randomBytes(12).toString('hex').toUpperCase();
+  const months = data.months || 1;
+
+  const result = await masterQuery(
+    `INSERT INTO licenses (tenant_id, license_code, plan, monthly_price, expires_at)
+     VALUES ($1, $2, $3, $4, NOW() + make_interval(months => $5)) RETURNING *`,
+    [tenantId, code, data.plan || 'standard', data.monthly_price || 0, months]
+  );
+  return result.rows[0];
+}
+
+export async function getLicenses(tenantId?: string) {
+  let sql = `SELECT l.*, t.name as tenant_name FROM licenses l JOIN tenants t ON t.id = l.tenant_id`;
+  const params: any[] = [];
+  if (tenantId) { params.push(tenantId); sql += ` WHERE l.tenant_id = $1`; }
+  sql += ' ORDER BY l.created_at DESC';
+  const result = await masterQuery(sql, params);
+  return result.rows;
+}
+
+// ─── Impersonation ───
+
+export async function impersonateTenant(adminId: number, tenantId: string) {
+  const admin = await masterQuery('SELECT * FROM super_admins WHERE id = $1', [adminId]);
+  if (admin.rows.length === 0) throw new Error('Admin no encontrado');
+
+  const tenant = await masterQuery('SELECT * FROM tenants WHERE id = $1', [tenantId]);
+  if (tenant.rows.length === 0) throw new Error('Restaurante no encontrado');
+
+  const token = jwt.sign(
+    { adminId, email: admin.rows[0].email, role: 'super_admin', impersonatingTenant: tenantId },
+    JWT_SECRET,
+    { expiresIn: '12h' }
+  );
+
+  // Audit
+  await masterQuery(
+    `INSERT INTO admin_audit_log (admin_id, action, tenant_id, details) VALUES ($1, 'impersonate', $2, $3)`,
+    [adminId, tenantId, JSON.stringify({ tenant_name: tenant.rows[0].name })]
+  );
+
+  return { token, tenant: tenant.rows[0] };
+}
+
+// ─── Provisioning ───
+
+export async function provisionTenant(tenantId: string) {
+  const { provisionTenant: provision } = await import('../../multi-tenant/tenantProvisioner');
+  return provision(tenantId);
+}
+
+// ─── Dashboard Stats ───
+
+export async function getDashboardStats() {
+  const tenants = await masterQuery(`
+    SELECT COUNT(*) as total,
+      COUNT(*) FILTER (WHERE status = 'active') as active,
+      COUNT(*) FILTER (WHERE status = 'trial') as trial,
+      COUNT(*) FILTER (WHERE status = 'suspended') as suspended
+    FROM tenants
+  `);
+  const licenses = await masterQuery(`
+    SELECT COUNT(*) as total,
+      COUNT(*) FILTER (WHERE status = 'active') as active,
+      COUNT(*) FILTER (WHERE expires_at < NOW()) as expired
+    FROM licenses
+  `);
+  return {
+    tenants: tenants.rows[0],
+    licenses: licenses.rows[0],
+  };
+}

@@ -5,6 +5,8 @@ import path from 'path';
 import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
 import { globalLimiter } from './middleware/rateLimiter';
+import { resolveTenant } from './middleware/tenantResolver';
+import superAdminRoutes from './modules/superAdmin/routes';
 
 import authRoutes from './modules/auth/routes';
 import userRoutes from './modules/users/routes';
@@ -96,6 +98,13 @@ app.get('/api/public/menu', async (_req, res) => {
     res.status(500).json({ error: 'Error loading menu' });
   }
 });
+
+// Super-admin API (no tenant context needed)
+app.use('/api/super-admin', superAdminRoutes);
+
+// Tenant resolver — attaches tenantDb to every authenticated request
+// Backward compatible: falls back to legacy pool if no tenantId in JWT
+app.use('/api', resolveTenant);
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -10,6 +10,7 @@
     "seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
+    "@types/qrcode": "^1.5.6",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dayjs": "^1.11.10",
@@ -19,8 +20,10 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "node-thermal-printer": "^4.4.2",
+    "otpauth": "^9.5.0",
     "pg": "^8.11.3",
     "playwright": "^1.58.2",
+    "qrcode": "^1.5.4",
     "socket.io": "^4.7.4",
     "ws": "^8.18.3",
     "zod": "^3.22.4"

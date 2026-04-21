@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { ConnectivityProvider } from './context/ConnectivityContext';
 import { installOfflineInterceptor } from './offline/offlineInterceptor';
+import AdminApp from './admin/AdminApp';
 
 // Install offline interceptor on startup
 installOfflineInterceptor();
@@ -156,6 +157,9 @@ export default function App() {
                 {/* Legacy redirects */}
                 <Route path="/reports" element={<Navigate to="/reports/daily" />} />
               </Route>
+
+              {/* Super Admin Panel */}
+              <Route path="/admin" element={<AdminApp />} />
 
               <Route path="*" element={<Navigate to="/home" />} />
             </Routes>
