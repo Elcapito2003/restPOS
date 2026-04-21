@@ -106,6 +106,61 @@ router.get('/suppliers', h(async (req, res) => {
   res.json(r.rows);
 }));
 
+// ─── Contact lookup (identify WhatsApp sender) ───
+router.get('/contact-lookup', h(async (req, res) => {
+  const raw = String(req.query.phone || '').replace(/\D/g, '');
+  if (!raw) return res.status(400).json({ error: 'phone requerido' });
+
+  // Owner: Antonio (DUO Café)
+  if (raw.endsWith('3313283362')) {
+    return res.json({ type: 'owner', name: 'Antonio', role: 'admin', business: 'DUO Café' });
+  }
+
+  // Supplier match: phone or whatsapp column ends with same digits (last 10)
+  const tail10 = raw.slice(-10);
+  const sup = await query(
+    `SELECT s.id, s.name, s.contact_name, s.whatsapp, s.phone, s.email, s.shipping_cost, s.free_shipping_min,
+       COALESCE(
+         (SELECT json_agg(json_build_object('item', ii.name, 'unit', ii.unit, 'price', iis.price, 'delivery_days', iis.delivery_days))
+          FROM inventory_item_suppliers iis JOIN inventory_items ii ON ii.id = iis.item_id
+          WHERE iis.supplier_id = s.id), '[]'::json) as items
+     FROM suppliers s
+     WHERE s.is_active = true
+       AND (regexp_replace(COALESCE(s.whatsapp, ''), '\\D', '', 'g') LIKE '%' || $1
+         OR regexp_replace(COALESCE(s.phone, ''), '\\D', '', 'g') LIKE '%' || $1)
+     LIMIT 1`,
+    [tail10]
+  );
+  if (sup.rows[0]) {
+    return res.json({ type: 'supplier', ...sup.rows[0] });
+  }
+  res.json({ type: 'unknown', phone_normalized: raw });
+}));
+
+// ─── Supplier orders: create from agent ───
+router.post('/supplier-orders', h(async (req, res) => {
+  const { supplier_name, items, notes } = req.body;
+  if (!supplier_name || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'supplier_name e items[] requeridos' });
+  }
+  const sup = await query(`SELECT id, name FROM suppliers WHERE is_active=true AND name ILIKE $1 LIMIT 1`, [`%${supplier_name}%`]);
+  if (!sup.rows[0]) return res.status(404).json({ error: `Proveedor "${supplier_name}" no encontrado` });
+
+  const est = items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
+  const order = await query(
+    `INSERT INTO supplier_orders(supplier_id, status, estimated_total, notes) VALUES($1, 'draft', $2, $3) RETURNING id`,
+    [sup.rows[0].id, est, notes || null]
+  );
+  const orderId = order.rows[0].id;
+  for (const it of items) {
+    await query(
+      `INSERT INTO supplier_order_items(order_id, item_name, quantity, unit, estimated_price) VALUES($1, $2, $3, $4, $5)`,
+      [orderId, it.item, Number(it.quantity) || 0, it.unit || 'pieza', Number(it.price) || null]
+    );
+  }
+  res.json({ message: `Pedido #${orderId} creado para ${sup.rows[0].name}`, order_id: orderId, estimated_total: est });
+}));
+
 // ─── ML Requests ───
 
 router.post('/ml-request', h(async (req, res) => {
