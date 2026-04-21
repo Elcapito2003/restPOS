@@ -25,60 +25,27 @@ Sistema punto de venta (POS) para restaurante/cafetería.
 - `modifier_groups` / `modifiers` / `product_modifier_groups` — sistema de modificadores
 - Migraciones en server/src/db/migrations/
 
-## PROBLEMAS PENDIENTES — Divergencia Server vs GitHub
+## Arquitectura Multi-Tenant
 
-El servidor de producción (165.227.121.235:/opt/restpos) tiene código que **NO está en GitHub**. No se puede hacer `git pull` en el server sin resolver esto primero.
+Cada restaurante tiene su propia base de datos. Una DB **master** (`restpos_master`) gestiona tenants, licencias, módulos, billing y super-admins.
 
-### Archivos staged (modificados pero no commiteados en el server)
-- client/package.json
-- client/src/App.tsx
-- client/src/config/api.ts
-- client/src/config/socket.ts
-- client/src/layouts/MainLayout.tsx
-- client/vite.config.ts
-- package-lock.json, package.json
-- server/package.json
-- server/src/app.ts
-- server/src/config/env.ts
-- server/src/index.ts
-- server/src/modules/auth/routes.ts
-- server/src/modules/auth/service.ts
-- server/src/modules/payments/service.ts
+### Componentes
+- **Master DB:** `restpos_master` — tenants, licenses, modules, tenant_modules, billing_records, admin_audit_log, super_admins
+- **Tenant DBs:** `restpos_cloud` (DUO Café, legacy) y `restpos_tenant_<slug>` (nuevos)
+- **Pool manager:** `server/src/multi-tenant/tenantPoolManager.ts` — abre un pool por tenant, evicta a los 30 min
+- **Tenant resolver:** middleware que resuelve el tenant desde el JWT y lo guarda en `AsyncLocalStorage`. `query()`/`getClient()` lo usan automáticamente — cero cambios en services existentes.
+- **Provisioner:** crea la DB, corre migraciones, siembra admin + PIN aleatorio, genera licencia
+- **Super-admin API:** `/api/super-admin/*` con JWT separado (`SUPER_ADMIN_JWT_SECRET`), 2FA TOTP opcional
+- **Panel UI:** React en `/admin` — login (2FA), dashboard (KPIs + mapa México), nuevo restaurante, detalle, impersonation
 
-### Migraciones solo en el server (no en GitHub)
-- 018-suppliers-inventory.sql
-- 019-purchasing-whatsapp.sql
-- 020-chatbot-memory.sql
-- 021-reception-payment.sql
-- 022-ml-requests.sql
-- 023-productions.sql
-- 024-presentations.sql
+### Setup
+```bash
+# Solo la primera vez, en el server:
+cd /opt/restpos/server
+npx tsx src/db/setupMaster.ts
+# Crea DB master + super-admin admin@restpos.com / admin2026 + registra DUO Café como tenant
+```
 
-### Módulos/páginas solo en el server (no en GitHub)
-- client/src/components/
-- client/src/context/ConnectivityContext.tsx
-- client/src/offline/
-- client/src/pages/AsistentePage.tsx
-- client/src/pages/InventarioPage.tsx
-- client/src/pages/MercadoLibrePage.tsx
-- client/src/pages/PedidosPage.tsx
-- client/src/pages/ProduccionesPage.tsx
-- client/src/pages/ProveedoresPage.tsx
-- client/src/pages/RecepcionPage.tsx
-- client/src/pages/SolicitarTransferenciaPage.tsx
-- client/src/pages/TransferenciasPage.tsx
-- server/src/modules/agent/
-- server/src/modules/banking/
-- server/src/modules/chatbot/
-- server/src/modules/inventory/
-- server/src/modules/mercadolibre/
-- server/src/modules/productRecipes/
-- server/src/modules/productions/
-- server/src/modules/purchasing/
-- server/src/modules/suppliers/
-- server/src/scripts/
-
-### Cómo resolver
-1. **Opción A (recomendada):** Desde el server, commitear todo y pushear a una rama nueva (`git checkout -b server-sync && git add -A && git commit && git push`). Luego hacer PR a main para revisar y mergear.
-2. **Opción B:** Bajar todo con scp a local, revisar, y pushear desde Windows.
-3. **Mientras tanto:** Para cambios de BD en prod, aplicar SQL directo con psql en vez de usar el sistema de migraciones.
+### Env vars extra
+- `MASTER_DATABASE_URL` — default `postgresql://restpos:restpos2026secure@localhost:5432/restpos_master`
+- `SUPER_ADMIN_JWT_SECRET` — separate from app JWT
