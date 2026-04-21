@@ -106,6 +106,21 @@ export async function generateLicense(req: Request, res: Response) {
   }
 }
 
+// ─── License redeem (public) ───
+
+export async function redeemLicense(req: Request, res: Response) {
+  try {
+    const { license_code } = req.body;
+    if (!license_code || typeof license_code !== 'string') {
+      return res.status(400).json({ error: 'license_code requerido' });
+    }
+    const result = await service.redeemLicense(license_code.trim().toUpperCase());
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
 // ─── Impersonation ───
 
 export async function impersonateTenant(req: Request, res: Response) {

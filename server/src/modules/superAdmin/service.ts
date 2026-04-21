@@ -220,6 +220,36 @@ export async function getLicenses(tenantId?: string) {
   return result.rows;
 }
 
+// ─── License redeem ───
+
+export async function redeemLicense(licenseCode: string) {
+  const result = await masterQuery(
+    `SELECT l.id as license_id, l.plan, l.status, l.expires_at,
+            t.id as tenant_id, t.name as tenant_name, t.slug, t.logo_url,
+            t.timezone, t.currency
+     FROM licenses l JOIN tenants t ON t.id = l.tenant_id
+     WHERE l.license_code = $1 LIMIT 1`,
+    [licenseCode]
+  );
+  if (result.rows.length === 0) throw new Error('Código de licencia inválido');
+  const lic = result.rows[0];
+  if (lic.status !== 'active') throw new Error(`Licencia ${lic.status}`);
+  if (lic.expires_at && new Date(lic.expires_at) < new Date()) {
+    throw new Error('Licencia expirada');
+  }
+  return {
+    tenant: {
+      id: lic.tenant_id,
+      name: lic.tenant_name,
+      slug: lic.slug,
+      logo_url: lic.logo_url,
+      timezone: lic.timezone,
+      currency: lic.currency,
+    },
+    license: { plan: lic.plan, expires_at: lic.expires_at },
+  };
+}
+
 // ─── Impersonation ───
 
 export async function impersonateTenant(adminId: number, tenantId: string) {

@@ -26,6 +26,9 @@ function superAdminAuth(req: Request, res: Response, next: NextFunction) {
 router.post('/auth/login', ctrl.login);
 router.post('/auth/verify-2fa', ctrl.verify2FA);
 
+// ─── Public: license redeem (used by mobile app to resolve tenant from license code) ───
+router.post('/license/redeem', ctrl.redeemLicense);
+
 // ─── Protected routes ───
 router.use(superAdminAuth);
 

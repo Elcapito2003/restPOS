@@ -4,7 +4,7 @@ import * as authService from './service';
 export async function login(req: Request, res: Response) {
   try {
     const { username, pin } = req.body;
-    const result = await authService.authenticateByUsername(username, pin);
+    const result = await authService.authenticateByUsername(username, pin, req.tenantId);
     res.json(result);
   } catch (err: any) {
     res.status(401).json({ error: err.message });
@@ -14,7 +14,7 @@ export async function login(req: Request, res: Response) {
 export async function pinLogin(req: Request, res: Response) {
   try {
     const { userId, pin } = req.body;
-    const result = await authService.authenticateByPin(userId, pin);
+    const result = await authService.authenticateByPin(userId, pin, req.tenantId);
     res.json(result);
   } catch (err: any) {
     res.status(401).json({ error: err.message });

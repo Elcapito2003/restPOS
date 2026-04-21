@@ -53,8 +53,8 @@ setInterval(() => {
 
 // ─── Auth Functions ───
 
-export async function authenticateByPin(userId: number, pin: string) {
-  const lockKey = `pin:${userId}`;
+export async function authenticateByPin(userId: number, pin: string, tenantId?: string) {
+  const lockKey = `pin:${tenantId || 'legacy'}:${userId}`;
   checkLockout(lockKey);
 
   const result = await query('SELECT id, username, display_name, pin, role, avatar_color FROM users WHERE id = $1 AND is_active = true', [userId]);
@@ -72,7 +72,7 @@ export async function authenticateByPin(userId: number, pin: string) {
 
   clearFailedAttempts(lockKey);
 
-  const payload: JwtPayload = { userId: user.id, username: user.username, role: user.role };
+  const payload: JwtPayload = { userId: user.id, username: user.username, role: user.role, ...(tenantId ? { tenantId } : {}) };
   const token = jwt.sign(payload, env.jwtSecret, { expiresIn: '12h' as any });
 
   return {
@@ -81,14 +81,13 @@ export async function authenticateByPin(userId: number, pin: string) {
   };
 }
 
-export async function authenticateByUsername(username: string, pin: string) {
-  const lockKey = `user:${username.toLowerCase()}`;
+export async function authenticateByUsername(username: string, pin: string, tenantId?: string) {
+  const lockKey = `user:${tenantId || 'legacy'}:${username.toLowerCase()}`;
   checkLockout(lockKey);
 
   const result = await query('SELECT id, username, display_name, pin, role, avatar_color FROM users WHERE username = $1 AND is_active = true', [username]);
   if (result.rows.length === 0) {
     recordFailedAttempt(lockKey);
-    // Don't reveal whether user exists
     throw new Error('Credenciales incorrectas');
   }
 
@@ -101,7 +100,7 @@ export async function authenticateByUsername(username: string, pin: string) {
 
   clearFailedAttempts(lockKey);
 
-  const payload: JwtPayload = { userId: user.id, username: user.username, role: user.role };
+  const payload: JwtPayload = { userId: user.id, username: user.username, role: user.role, ...(tenantId ? { tenantId } : {}) };
   const token = jwt.sign(payload, env.jwtSecret, { expiresIn: '12h' as any });
 
   return {

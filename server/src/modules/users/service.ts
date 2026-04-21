@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import { query } from '../../config/database';
+import { emitToUser } from '../../config/socket';
 
 export async function getAll() {
   const result = await query('SELECT id, username, display_name, role, avatar_color, is_active, created_at FROM users ORDER BY display_name');
@@ -41,9 +42,13 @@ export async function update(id: number, data: Partial<{ username: string; displ
     `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, username, display_name, role, avatar_color, is_active`,
     values
   );
+  if (data.is_active === false) {
+    emitToUser(id, 'user:deactivated', { userId: id, reason: 'deactivated' });
+  }
   return result.rows[0];
 }
 
 export async function remove(id: number) {
   await query('UPDATE users SET is_active = false WHERE id = $1', [id]);
+  emitToUser(id, 'user:deactivated', { userId: id, reason: 'removed' });
 }
