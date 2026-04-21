@@ -1,6 +1,6 @@
 {
   "name": "restpos",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "RestPOS - Sistema Punto de Venta para Restaurantes",
   "main": "main.js",
   "author": "RestPOS",
@@ -11,7 +11,8 @@
     "build:dir": "electron-builder --win --dir"
   },
   "dependencies": {
-    "node-thermal-printer": "^4.4.2"
+    "node-thermal-printer": "^4.4.2",
+    "electron-updater": "^6.8.3"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -32,6 +33,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "localPrinter.js",
       "icon.png"
     ],
     "win": {
@@ -58,8 +60,5 @@
       "owner": "Elcapito2003",
       "repo": "restPOS"
     }
-  },
-  "dependencies": {
-    "electron-updater": "^6.8.3"
   }
 }
