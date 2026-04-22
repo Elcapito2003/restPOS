@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert,
-  Modal,
+  Modal, Animated,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import {
-  Category, Product, ModifierGroup, Modifier,
+  Category, Product, ModifierGroup, Modifier, Order,
   fetchCategoriesTree, fetchProducts, fetchModifierGroups,
-  addOrderItem, createOrder,
+  addOrderItem, createOrder, getOrderByTable,
 } from '../api/client';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Menu'>;
@@ -26,6 +26,9 @@ export default function MenuScreen({ route, navigation }: Props) {
   const [orderId, setOrderId] = useState<number | null>(initialOrderId);
 
   const [picker, setPicker] = useState<{ product: Product; groups: ModifierGroup[] } | null>(null);
+  const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+  const flashAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     (async () => {
@@ -34,6 +37,10 @@ export default function MenuScreen({ route, navigation }: Props) {
         setCategories(cats);
         setModifierGroups(mods);
         if (cats.length) setActiveRoot(cats[0]);
+        if (tableId) {
+          const existing = await getOrderByTable(tableId);
+          if (existing) setCurrentOrder(existing);
+        }
       } catch (e: any) {
         Alert.alert('Error', e?.message || 'No se pudo cargar el menú');
       } finally {
@@ -41,6 +48,12 @@ export default function MenuScreen({ route, navigation }: Props) {
       }
     })();
   }, []);
+
+  const flashAdded = (name: string) => {
+    setJustAdded(name);
+    flashAnim.setValue(1);
+    Animated.timing(flashAnim, { toValue: 0, duration: 1400, useNativeDriver: true }).start(() => setJustAdded(null));
+  };
 
   const activeCategory = activeSub || activeRoot;
   const subcategories = useMemo(() => activeRoot?.children ?? [], [activeRoot]);
@@ -73,10 +86,20 @@ export default function MenuScreen({ route, navigation }: Props) {
   const addItemImmediate = async (p: Product, modifiers: { modifier_id: number }[]) => {
     try {
       const oid = await ensureOrder();
-      await addOrderItem(oid, { product_id: p.id, quantity: 1, modifiers });
+      const updated = await addOrderItem(oid, { product_id: p.id, quantity: 1, modifiers });
+      setCurrentOrder(updated);
+      flashAdded(p.name);
     } catch (e: any) {
       Alert.alert('Error', e?.response?.data?.error || e?.message || 'No se pudo agregar');
     }
+  };
+
+  const pendingCount = currentOrder?.items.filter(i => i.status === 'pending').reduce((s, i) => s + Number(i.quantity), 0) ?? 0;
+  const orderTotal = currentOrder ? Number(currentOrder.total) : 0;
+
+  const goToTicket = () => {
+    if (tableId) navigation.navigate('Order', { tableId, tableLabel, floorId: null, orderId: orderId ?? undefined });
+    else navigation.navigate('Tables');
   };
 
   return (
@@ -89,15 +112,7 @@ export default function MenuScreen({ route, navigation }: Props) {
           <Text style={styles.title}>{tableLabel}</Text>
           <Text style={styles.subtitle}>Menú</Text>
         </View>
-        <TouchableOpacity
-          onPress={() => {
-            if (tableId) navigation.navigate('Order', { tableId, tableLabel, floorId: null, orderId: orderId ?? undefined });
-            else navigation.navigate('Tables');
-          }}
-          style={styles.cartBtn}
-        >
-          <Text style={styles.cartBtnText}>Ver ticket ›</Text>
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       {loading ? (
@@ -164,6 +179,25 @@ export default function MenuScreen({ route, navigation }: Props) {
           />
         )}
       </Modal>
+
+      {justAdded && (
+        <Animated.View style={[styles.toast, { opacity: flashAnim, transform: [{ translateY: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }]} pointerEvents="none">
+          <Text style={styles.toastText}>✓ {justAdded} agregado</Text>
+        </Animated.View>
+      )}
+
+      {currentOrder && pendingCount > 0 && (
+        <TouchableOpacity style={styles.cartBar} onPress={goToTicket} activeOpacity={0.85}>
+          <View style={styles.cartCountBadge}>
+            <Text style={styles.cartCountText}>{pendingCount}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cartTitle}>Ver ticket y enviar</Text>
+            <Text style={styles.cartSubtitle}>${orderTotal.toFixed(2)} · {pendingCount} ítem{pendingCount !== 1 ? 's' : ''} por enviar</Text>
+          </View>
+          <Text style={styles.cartArrow}>›</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -297,11 +331,31 @@ const styles = StyleSheet.create({
   subTabActive: { backgroundColor: '#3B82F6' },
   subTabText: { color: '#94A3B8', fontSize: 12 },
   subTabTextActive: { color: '#fff' },
-  productGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 10, paddingBottom: 30 },
+  productGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 10, paddingBottom: 120 },
   productCard: { width: '48%', backgroundColor: '#1E293B', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#334155', minHeight: 80, justifyContent: 'space-between' },
   productName: { color: '#fff', fontSize: 14, fontWeight: '600' },
   productPrice: { color: '#93C5FD', fontSize: 16, fontWeight: '700', marginTop: 6 },
   emptyText: { color: '#64748B', flex: 1, textAlign: 'center', marginTop: 40 },
+  toast: {
+    position: 'absolute', top: 90, alignSelf: 'center',
+    backgroundColor: '#22C55E', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
+  },
+  toastText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  cartBar: {
+    position: 'absolute', left: 10, right: 10, bottom: 14,
+    backgroundColor: '#22C55E', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 8,
+  },
+  cartCountBadge: {
+    backgroundColor: '#fff', width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center', marginRight: 12,
+  },
+  cartCountText: { color: '#16A34A', fontWeight: '800', fontSize: 16 },
+  cartTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  cartSubtitle: { color: '#DCFCE7', fontSize: 12, marginTop: 2 },
+  cartArrow: { color: '#fff', fontSize: 28, fontWeight: '700', marginLeft: 6 },
 });
 
 const mpStyles = StyleSheet.create({
