@@ -173,3 +173,71 @@ export async function sendOrderToKitchen(orderId: number): Promise<Order> {
   const res = await api.post(`/orders/${orderId}/send`);
   return res.data;
 }
+
+export async function setOrderDiscount(orderId: number, discountPercent: number, presetId?: number | null): Promise<Order> {
+  const res = await api.patch(`/orders/${orderId}/discount`, { discount_percent: discountPercent, preset_id: presetId ?? null });
+  return res.data;
+}
+
+export async function setOrderTip(orderId: number, amount: number): Promise<Order> {
+  const res = await api.patch(`/orders/${orderId}/tip`, { amount });
+  return res.data;
+}
+
+export async function setOrderGuests(orderId: number, guestCount: number): Promise<Order> {
+  const res = await api.patch(`/orders/${orderId}/guests`, { guest_count: guestCount });
+  return res.data;
+}
+
+export async function setOrderObservations(orderId: number, notes: string): Promise<Order> {
+  const res = await api.patch(`/orders/${orderId}/observations`, { notes });
+  return res.data;
+}
+
+export async function changeOrderWaiter(orderId: number, waiterId: number): Promise<Order> {
+  const res = await api.patch(`/orders/${orderId}/waiter`, { waiter_id: waiterId });
+  return res.data;
+}
+
+export async function changeOrderTable(orderId: number, tableId: number): Promise<Order> {
+  const res = await api.patch(`/orders/${orderId}/table`, { table_id: tableId });
+  return res.data;
+}
+
+export async function cancelOrder(orderId: number): Promise<Order> {
+  const res = await api.post(`/orders/${orderId}/cancel`);
+  return res.data;
+}
+
+export async function cancelOrderItem(orderId: number, itemId: number, reason: string): Promise<Order> {
+  const res = await api.post(`/orders/${orderId}/items/${itemId}/cancel`, { reason });
+  return res.data;
+}
+
+export async function fetchCancellationReasons(): Promise<Array<{ id: number; name: string }>> {
+  const res = await api.get('/orders/meta/cancellation-reasons');
+  return res.data;
+}
+
+export async function mergeWithOrder(sourceId: number, targetOrderId: number): Promise<Order> {
+  const res = await api.post(`/orders/${sourceId}/merge`, { target_order_id: targetOrderId });
+  return res.data;
+}
+
+export async function transferOrderItems(fromOrderId: number, targetOrderId: number, itemIds: number[]): Promise<{ from: Order; to: Order }> {
+  const res = await api.post(`/orders/${fromOrderId}/transfer-items`, { target_order_id: targetOrderId, item_ids: itemIds });
+  return res.data;
+}
+
+export async function fetchActiveOrders(): Promise<Order[]> {
+  const res = await api.get('/orders');
+  return res.data;
+}
+
+export async function printReceipt(orderId: number): Promise<void> {
+  await api.post(`/printer/receipt/${orderId}`);
+}
+
+export async function printComanda(orderId: number): Promise<void> {
+  await api.post(`/printer/comanda/${orderId}`);
+}
