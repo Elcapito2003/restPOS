@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import MexicoMap from '../components/MexicoMap';
-import { Store, Shield, CreditCard, Activity, Plus, LogOut, Settings } from 'lucide-react';
+import { Store, Shield, CreditCard, Activity, Plus, LogOut, Settings, ScrollText } from 'lucide-react';
 
-export default function DashboardPage({ onNewRestaurant, onSelectTenant }: { onNewRestaurant?: () => void; onSelectTenant?: (id: string) => void }) {
+export default function DashboardPage({ onNewRestaurant, onSelectTenant, onOpenAuditLog, onOpenSettings }: {
+  onNewRestaurant?: () => void;
+  onSelectTenant?: (id: string) => void;
+  onOpenAuditLog?: () => void;
+  onOpenSettings?: () => void;
+}) {
   const { admin, logout, adminFetch } = useAdminAuth();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -58,8 +63,14 @@ export default function DashboardPage({ onNewRestaurant, onSelectTenant }: { onN
               <p className="text-xs text-slate-400">Panel de Administración</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-400">{admin?.email}</span>
+          <div className="flex items-center gap-3">
+            <button onClick={onOpenAuditLog} className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-colors" title="Registro de actividad">
+              <ScrollText size={18} />
+            </button>
+            <button onClick={onOpenSettings} className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-colors" title="Configuración / 2FA">
+              <Settings size={18} />
+            </button>
+            <span className="text-sm text-slate-400 hidden md:inline">{admin?.email}</span>
             <button onClick={logout} className="text-slate-400 hover:text-red-400 transition-colors" title="Cerrar sesión">
               <LogOut size={20} />
             </button>

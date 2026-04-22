@@ -143,6 +143,53 @@ export async function provisionTenant(req: Request, res: Response) {
   }
 }
 
+// ─── Billing ───
+
+export async function getBilling(req: Request, res: Response) {
+  try {
+    res.json(await service.getBillingRecords(req.params.tenantId));
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+}
+
+export async function recordBilling(req: Request, res: Response) {
+  try {
+    const result = await service.recordBilling(req.params.tenantId, req.body, (req as any).admin.adminId);
+    res.status(201).json(result);
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+}
+
+export async function renewLicense(req: Request, res: Response) {
+  try {
+    const months = Number(req.body.months || 1);
+    const result = await service.renewLicense(req.params.tenantId, months, (req as any).admin.adminId);
+    res.json(result);
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+}
+
+export async function revokeLicense(req: Request, res: Response) {
+  try {
+    const result = await service.revokeLicense(Number(req.params.licenseId), (req as any).admin.adminId);
+    res.json(result);
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+}
+
+// ─── Health ───
+
+export async function getHealth(req: Request, res: Response) {
+  try {
+    res.json(await service.getTenantHealth(req.params.tenantId));
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+}
+
+// ─── Audit log ───
+
+export async function getAuditLog(req: Request, res: Response) {
+  try {
+    const limit = Number(req.query.limit || 50);
+    res.json(await service.getAuditLog(limit));
+  } catch (err: any) { res.status(400).json({ error: err.message }); }
+}
+
 // ─── Dashboard ───
 
 export async function getDashboard(_req: Request, res: Response) {

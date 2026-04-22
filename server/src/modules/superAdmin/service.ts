@@ -281,6 +281,145 @@ export async function provisionTenant(tenantId: string) {
   return provision(tenantId);
 }
 
+// ─── Billing ───
+
+export async function recordBilling(tenantId: string, data: {
+  amount: number;
+  period_start: string;
+  period_end: string;
+  payment_method?: string;
+  payment_reference?: string;
+  notes?: string;
+}, adminId: number) {
+  const lic = await masterQuery(
+    "SELECT id FROM licenses WHERE tenant_id=$1 AND status='active' ORDER BY created_at DESC LIMIT 1",
+    [tenantId]
+  );
+  const result = await masterQuery(
+    `INSERT INTO billing_records(tenant_id, license_id, amount, period_start, period_end, status, payment_method, payment_reference, paid_at)
+     VALUES($1, $2, $3, $4, $5, 'paid', $6, $7, NOW()) RETURNING *`,
+    [
+      tenantId,
+      lic.rows[0]?.id ?? null,
+      data.amount,
+      data.period_start,
+      data.period_end,
+      data.payment_method ?? null,
+      data.payment_reference ?? null,
+    ]
+  );
+  await masterQuery(
+    `INSERT INTO admin_audit_log(admin_id, action, tenant_id, details) VALUES($1, 'record_payment', $2, $3)`,
+    [adminId, tenantId, JSON.stringify({ amount: data.amount, period_start: data.period_start, period_end: data.period_end })]
+  );
+  return result.rows[0];
+}
+
+export async function getBillingRecords(tenantId: string) {
+  const result = await masterQuery(
+    `SELECT br.*, l.license_code FROM billing_records br
+     LEFT JOIN licenses l ON l.id = br.license_id
+     WHERE br.tenant_id=$1 ORDER BY br.period_start DESC`,
+    [tenantId]
+  );
+  return result.rows;
+}
+
+export async function renewLicense(tenantId: string, months: number, adminId: number) {
+  const result = await masterQuery(
+    `UPDATE licenses
+     SET expires_at = GREATEST(expires_at, NOW()) + make_interval(months => $2)
+     WHERE tenant_id = $1 AND status IN ('active','trial')
+     RETURNING *`,
+    [tenantId, months]
+  );
+  if (result.rows.length === 0) throw new Error('No hay licencia activa para renovar');
+  await masterQuery(
+    `INSERT INTO admin_audit_log(admin_id, action, tenant_id, details) VALUES($1, 'renew_license', $2, $3)`,
+    [adminId, tenantId, JSON.stringify({ months, new_expires_at: result.rows[0].expires_at })]
+  );
+  return result.rows[0];
+}
+
+export async function revokeLicense(licenseId: number, adminId: number) {
+  const result = await masterQuery(
+    `UPDATE licenses SET status = 'suspended' WHERE id = $1 RETURNING *`,
+    [licenseId]
+  );
+  if (result.rows.length === 0) throw new Error('Licencia no encontrada');
+  await masterQuery(
+    `INSERT INTO admin_audit_log(admin_id, action, tenant_id, details) VALUES($1, 'revoke_license', $2, $3)`,
+    [adminId, result.rows[0].tenant_id, JSON.stringify({ license_id: licenseId })]
+  );
+  return result.rows[0];
+}
+
+// ─── Tenant Health ───
+
+export async function getTenantHealth(tenantId: string) {
+  const info = await masterQuery('SELECT name, db_name FROM tenants WHERE id=$1', [tenantId]);
+  if (info.rows.length === 0) throw new Error('Tenant no encontrado');
+  const { db_name } = info.rows[0];
+
+  const sizeRes = await masterQuery(`SELECT pg_database_size($1) as bytes`, [db_name]);
+  const db_size_mb = Number(sizeRes.rows[0].bytes) / (1024 * 1024);
+
+  let ordersToday = 0;
+  let revenueToday = 0;
+  let activeUsers = 0;
+  let openOrders = 0;
+
+  try {
+    const { getTenantPool } = await import('../../multi-tenant/tenantPoolManager');
+    const db = await getTenantPool(tenantId);
+    const today = await db.query(
+      `SELECT COUNT(*) as cnt, COALESCE(SUM(total),0) as total FROM orders
+       WHERE status='closed' AND DATE(created_at)=CURRENT_DATE`
+    );
+    const usersR = await db.query(`SELECT COUNT(*) as cnt FROM users WHERE is_active=true`);
+    const openR = await db.query(
+      `SELECT COUNT(*) as cnt FROM orders WHERE status IN ('open','sent','partial')`
+    );
+    ordersToday = Number(today.rows[0].cnt);
+    revenueToday = Number(today.rows[0].total);
+    activeUsers = Number(usersR.rows[0].cnt);
+    openOrders = Number(openR.rows[0].cnt);
+  } catch (err: any) {
+    console.warn(`[health] could not query tenant DB: ${err.message}`);
+  }
+
+  await masterQuery(
+    `INSERT INTO tenant_health(tenant_id, db_size_mb, orders_today, revenue_today, active_users)
+     VALUES($1, $2, $3, $4, $5)`,
+    [tenantId, db_size_mb, ordersToday, revenueToday, activeUsers]
+  );
+
+  return {
+    db_size_mb: Number(db_size_mb.toFixed(2)),
+    orders_today: ordersToday,
+    revenue_today: revenueToday,
+    active_users: activeUsers,
+    open_orders: openOrders,
+    checked_at: new Date().toISOString(),
+  };
+}
+
+// ─── Audit log ───
+
+export async function getAuditLog(limit: number = 50) {
+  const result = await masterQuery(
+    `SELECT a.id, a.action, a.details, a.created_at,
+            sa.email as admin_email, sa.display_name as admin_name,
+            t.id as tenant_id, t.name as tenant_name, t.slug as tenant_slug
+     FROM admin_audit_log a
+     LEFT JOIN super_admins sa ON sa.id = a.admin_id
+     LEFT JOIN tenants t ON t.id = a.tenant_id
+     ORDER BY a.created_at DESC LIMIT $1`,
+    [Math.min(limit, 200)]
+  );
+  return result.rows;
+}
+
 // ─── Dashboard Stats ───
 
 export async function getDashboardStats() {

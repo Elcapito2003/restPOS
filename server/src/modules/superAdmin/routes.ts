@@ -58,4 +58,18 @@ router.post('/tenants/:tenantId/provision', ctrl.provisionTenant);
 // Impersonation — enter a restaurant as admin
 router.post('/tenants/:tenantId/enter', ctrl.impersonateTenant);
 
+// Billing
+router.get('/tenants/:tenantId/billing', ctrl.getBilling);
+router.post('/tenants/:tenantId/billing', ctrl.recordBilling);
+
+// License management
+router.post('/tenants/:tenantId/license/renew', ctrl.renewLicense);
+router.patch('/licenses/:licenseId/revoke', ctrl.revokeLicense);
+
+// Tenant health snapshot
+router.get('/tenants/:tenantId/health', ctrl.getHealth);
+
+// Audit log
+router.get('/audit-log', ctrl.getAuditLog);
+
 export default router;
