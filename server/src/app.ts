@@ -50,6 +50,8 @@ const allowedOrigins = [
   'http://localhost:3001',
   'http://165.227.121.235',
   'https://165.227.121.235',
+  'https://restpos.ai',
+  'https://www.restpos.ai',
 ].filter(Boolean);
 
 app.use(cors({
