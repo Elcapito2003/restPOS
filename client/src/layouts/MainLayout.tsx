@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { LogOut, ChevronDown } from 'lucide-react';
 import OfflineIndicator from '../components/OfflineIndicator';
 import { useConnectivity } from '../context/ConnectivityContext';
+import ShiftGate from '../components/ShiftGate';
 
 interface SubItem {
   label: string;
@@ -260,7 +261,9 @@ export default function MainLayout() {
 
       {/* Page content */}
       <main className="flex-1 overflow-auto bg-gray-100">
-        <Outlet />
+        <ShiftGate>
+          <Outlet />
+        </ShiftGate>
       </main>
     </div>
   );

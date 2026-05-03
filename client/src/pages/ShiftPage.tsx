@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
-import { Clock, LogIn, LogOut, DollarSign, User } from 'lucide-react';
+import { Clock, LogIn, LogOut, DollarSign, User, History } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function ShiftPage() {
   const qc = useQueryClient();
-  const { user: currentUser } = useAuth();
+  const navigate = useNavigate();
+  const { user: currentUser, logout } = useAuth();
+  const canSeeHistory = currentUser?.role === 'admin' || currentUser?.role === 'manager';
 
   const { data: myShift, isLoading } = useQuery({
     queryKey: ['shift', 'mine'],
@@ -49,16 +52,33 @@ export default function ShiftPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['shift'] });
       qc.invalidateQueries({ queryKey: ['shifts'] });
-      toast.success('Turno cerrado');
+      toast.success('Turno cerrado. Sesión cerrada.');
+      setTimeout(() => {
+        logout();
+        navigate('/login');
+      }, 600);
     },
     onError: (err: any) => toast.error(err.response?.data?.error || 'Error'),
   });
 
+  const { data: history } = useQuery({
+    queryKey: ['shifts', 'history'],
+    queryFn: () => api.get('/shifts/history').then(r => r.data),
+    enabled: canSeeHistory,
+  });
+
+  const startingCashNum = parseFloat(startingCash);
+  const startingCashValid = !isNaN(startingCashNum) && startingCashNum > 0;
+
   const handleOpenShift = () => {
+    if (!startingCashValid) {
+      toast.error('El monto inicial debe ser mayor a 0');
+      return;
+    }
     const userId = selectedUserId || currentUser?.id;
     openMutation.mutate({
       user_id: userId || undefined,
-      starting_cash: startingCash ? parseFloat(startingCash) : 0,
+      starting_cash: startingCashNum,
       notes: notes || undefined,
     });
   };
@@ -152,7 +172,7 @@ export default function ShiftPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <DollarSign size={14} className="inline mr-1" />
-              Fondo inicial de caja
+              Fondo inicial de caja <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
@@ -162,11 +182,11 @@ export default function ShiftPage() {
                 onChange={e => setStartingCash(e.target.value)}
                 className="input pl-8 text-lg font-medium"
                 placeholder="0.00"
-                min="0"
+                min="0.01"
                 step="0.01"
               />
             </div>
-            <p className="text-xs text-gray-400 mt-1">Monto de efectivo con el que inicia la caja</p>
+            <p className="text-xs text-gray-500 mt-1">Cuenta el efectivo en caja antes de abrir. Debe ser mayor a 0.</p>
           </div>
 
           {/* Notes */}
@@ -186,7 +206,7 @@ export default function ShiftPage() {
             <button onClick={() => setShowOpenForm(false)} className="btn-secondary flex-1">Cancelar</button>
             <button
               onClick={handleOpenShift}
-              disabled={!selectedUserId || openMutation.isPending}
+              disabled={!selectedUserId || !startingCashValid || openMutation.isPending}
               className="btn-primary flex-1 gap-2 disabled:opacity-50"
             >
               <LogIn size={18} />
@@ -223,6 +243,62 @@ export default function ShiftPage() {
           )}
         </div>
       </div>
+
+      {/* Shift history (admin / manager only) */}
+      {canSeeHistory && (
+        <div className="card">
+          <div className="p-4 border-b flex items-center gap-2">
+            <History size={18} className="text-gray-600" />
+            <h3 className="font-bold">Historial de Turnos</h3>
+            <span className="text-xs text-gray-500 ml-auto">Últimos 50</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+                <tr>
+                  <th className="px-3 py-2 text-left">Usuario</th>
+                  <th className="px-3 py-2 text-left">Apertura</th>
+                  <th className="px-3 py-2 text-left">Cierre</th>
+                  <th className="px-3 py-2 text-right">Fondo inicial</th>
+                  <th className="px-3 py-2 text-left">Estado</th>
+                  <th className="px-3 py-2 text-left">Notas</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {history?.map((s: any) => (
+                  <tr key={s.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium">{s.display_name}</td>
+                    <td className="px-3 py-2 text-gray-600">
+                      {dayjs(s.opened_at).format('DD/MM/YYYY HH:mm')}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">
+                      {s.closed_at ? dayjs(s.closed_at).format('DD/MM/YYYY HH:mm') : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      ${parseFloat(s.starting_cash || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        s.status === 'open'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {s.status === 'open' ? 'Abierto' : 'Cerrado'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate">
+                      {s.notes || '—'}
+                    </td>
+                  </tr>
+                ))}
+                {(!history || history.length === 0) && (
+                  <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">Sin historial</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,12 +2,14 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { authorize } from '../../middleware/role';
 import { validate } from '../../middleware/validate';
+import { requireActiveShift } from '../../middleware/requireActiveShift';
 import { createOrderSchema, addItemSchema, updateItemSchema, discountSchema } from './schema';
 import * as ctrl from './controller';
 
 const router = Router();
 
 router.use(authenticate);
+router.use(requireActiveShift);
 
 router.get('/', ctrl.getActive);
 router.get('/kitchen', ctrl.getKitchenOrders);

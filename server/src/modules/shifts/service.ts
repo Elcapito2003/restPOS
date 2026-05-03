@@ -15,11 +15,11 @@ export async function getOpen() {
   return result.rows;
 }
 
-export async function open(userId: number, data?: { starting_cash?: number; notes?: string }) {
+export async function open(userId: number, data: { starting_cash: number; notes?: string }) {
   const existing = await getOpenByUser(userId);
   if (existing) throw new Error('Ya tienes un turno abierto');
 
-  const startingCash = data?.starting_cash || 0;
+  const startingCash = data.starting_cash;
 
   // Auto-open cash register if none is open
   let register = await cashService.getOpen();
