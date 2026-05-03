@@ -31,7 +31,7 @@ export default function MaintenancePage() {
         </button>
         {showInfo && (
           <div className="mt-3 space-y-1 text-sm text-gray-600">
-            <p><strong>Sistema:</strong> restPOS v1.0.0</p>
+            <p><strong>Sistema:</strong> restPOS v{__APP_VERSION__}</p>
             <p><strong>Frontend:</strong> React + Vite + TypeScript + Tailwind</p>
             <p><strong>Backend:</strong> Node.js + Express + TypeScript</p>
             <p><strong>Base de datos:</strong> PostgreSQL 16</p>

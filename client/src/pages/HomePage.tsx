@@ -84,7 +84,7 @@ export default function HomePage() {
         <div className="absolute bottom-0 left-0 right-0 flex items-end justify-between px-4 pb-4">
           {/* Left: System info */}
           <div className="bg-white/90 backdrop-blur rounded-lg px-6 py-4 shadow-lg">
-            <p className="font-bold text-gray-800">restPOS v1.0</p>
+            <p className="font-bold text-gray-800">restPOS v{__APP_VERSION__}</p>
             <p className="text-sm text-gray-600">Usuario: <b>{user?.display_name}</b> ({user?.role})</p>
             <p className="text-sm text-gray-500">Conexión establecida</p>
           </div>
