@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('restpos', {
     ipcRenderer.on('connectivity-changed', (_event, isOnline) => callback(isOnline));
   },
   getServerUrl: () => ipcRenderer.sendSync('get-server-url'),
+  // Notifica al main si hay turno(s) abierto(s) — el main usa esto para bloquear el cierre
+  // de la ventana hasta que se cierren los turnos o el usuario confirme.
+  setShiftStatus: (hasOpenShift) => ipcRenderer.send('shift:status-changed', !!hasOpenShift),
 });
 
 // Local printing (from GDL)

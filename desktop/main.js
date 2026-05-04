@@ -72,6 +72,14 @@ ipcMain.on('get-server-url', (event) => {
   event.returnValue = SERVER_URL;
 });
 
+// ─── Shift status (bloquea cierre si hay turno abierto) ───
+let hasOpenShift = false;
+let confirmedClose = false;
+
+ipcMain.on('shift:status-changed', (_event, hasShift) => {
+  hasOpenShift = !!hasShift;
+});
+
 // ─── Window ───
 
 function getClientPath() {
@@ -156,6 +164,27 @@ function createWindow() {
       return { action: 'deny' };
     }
     return { action: 'allow' };
+  });
+
+  // Interceptar cierre cuando hay turno abierto
+  mainWindow.on('close', (e) => {
+    if (hasOpenShift && !confirmedClose) {
+      e.preventDefault();
+      dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Turno abierto',
+        message: '¿Seguro que quieres cerrar la aplicación?',
+        detail: 'Hay un turno abierto. Lo recomendable es cerrarlo desde el menú "Cerrar turno" antes de salir, para llevar el control correcto de la caja.',
+        buttons: ['Cancelar', 'Cerrar de todas formas'],
+        defaultId: 0,
+        cancelId: 0,
+      }).then((result) => {
+        if (result.response === 1) {
+          confirmedClose = true;
+          mainWindow.close();
+        }
+      });
+    }
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });

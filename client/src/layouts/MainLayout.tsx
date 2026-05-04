@@ -7,6 +7,7 @@ import OfflineIndicator from '../components/OfflineIndicator';
 import { useConnectivity } from '../context/ConnectivityContext';
 import ShiftGate from '../components/ShiftGate';
 import { usePrintListener } from '../hooks/usePrintListener';
+import { useShiftStatusBridge } from '../hooks/useShiftStatusBridge';
 
 interface SubItem {
   label: string;
@@ -28,6 +29,8 @@ export default function MainLayout() {
   const navigate = useNavigate();
   // Activa el puente que escucha 'print:comanda'/'print:receipt' del server y los delega al Electron local
   usePrintListener();
+  // Notifica al main de Electron si hay turno abierto, para bloquear cierre accidental
+  useShiftStatusBridge();
   const location = useLocation();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
