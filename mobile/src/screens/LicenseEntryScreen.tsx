@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { KeyRound, Sparkles } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { redeemLicense } from '../api/client';
+import Button from '../components/ui/Button';
+import { showError } from '../lib/toast';
 
 export default function LicenseEntryScreen() {
   const { saveTenant } = useAuth();
@@ -11,7 +14,7 @@ export default function LicenseEntryScreen() {
   const submit = async () => {
     const clean = code.trim().toUpperCase().replace(/\s+/g, '');
     if (clean.length < 8) {
-      Alert.alert('Código inválido', 'Revisa el código de licencia');
+      showError('Código inválido', 'Revisa el código de licencia');
       return;
     }
     setLoading(true);
@@ -27,60 +30,59 @@ export default function LicenseEntryScreen() {
       } else if (e?.code === 'ECONNABORTED' || e?.message?.includes('timeout')) {
         msg = 'El servidor no respondió a tiempo. Revisa tu conexión.';
       } else if (e?.message === 'Network Error') {
-        msg = 'Sin conexión al servidor. Revisa que tengas internet.';
+        msg = 'Sin conexión al servidor.';
       } else {
         msg = e?.message || 'Error desconocido';
       }
-      Alert.alert(title, msg);
+      showError(title, msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>restPOS</Text>
-        <Text style={styles.subtitle}>Comandero</Text>
-        <Text style={styles.label}>Código de licencia</Text>
-        <TextInput
-          style={styles.input}
-          value={code}
-          onChangeText={setCode}
-          placeholder="ABCD1234..."
-          placeholderTextColor="#64748B"
-          autoCapitalize="characters"
-          autoCorrect={false}
-          editable={!loading}
-        />
-        <TouchableOpacity style={[styles.button, loading && { opacity: 0.6 }]} onPress={submit} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Activar</Text>}
-        </TouchableOpacity>
-        <Text style={styles.hint}>El administrador genera este código desde el panel /admin</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      className="flex-1 bg-bg-base"
+    >
+      <View className="flex-1 justify-center px-6">
+        {/* Branding */}
+        <View className="items-center mb-8">
+          <View className="w-20 h-20 rounded-2xl bg-brand-500/15 items-center justify-center mb-4">
+            <Sparkles size={40} color="#60A5FA" />
+          </View>
+          <Text className="text-ink-primary text-4xl font-bold">restPOS</Text>
+          <Text className="text-brand-400 text-base mt-1">Comandero</Text>
+        </View>
+
+        {/* Card */}
+        <View className="bg-bg-card border border-bg-border rounded-3xl p-6">
+          <View className="flex-row items-center mb-4">
+            <KeyRound size={18} color="#94A3B8" />
+            <Text className="text-ink-secondary ml-2 font-medium">Código de licencia</Text>
+          </View>
+
+          <TextInput
+            value={code}
+            onChangeText={setCode}
+            placeholder="ABCD1234..."
+            placeholderTextColor="#475569"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            editable={!loading}
+            className="bg-bg-elevated rounded-xl px-4 py-4 text-ink-primary text-base mb-4"
+            style={{ fontFamily: 'monospace', letterSpacing: 1 }}
+          />
+
+          <Button variant="primary" size="lg" fullWidth loading={loading} onPress={submit}>
+            Activar dispositivo
+          </Button>
+
+          <Text className="text-ink-muted text-xs text-center mt-4">
+            El administrador genera este código desde el panel /admin
+          </Text>
+        </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', padding: 24 },
-  card: { backgroundColor: '#1E293B', borderRadius: 20, padding: 28, borderWidth: 1, borderColor: '#334155' },
-  title: { color: '#fff', fontSize: 32, fontWeight: 'bold', textAlign: 'center' },
-  subtitle: { color: '#93C5FD', fontSize: 16, textAlign: 'center', marginBottom: 28 },
-  label: { color: '#94A3B8', fontSize: 13, marginBottom: 6 },
-  input: {
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-    color: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    fontFamily: 'monospace',
-    marginBottom: 16,
-  },
-  button: { backgroundColor: '#3B82F6', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  hint: { color: '#64748B', fontSize: 12, textAlign: 'center', marginTop: 16 },
-});

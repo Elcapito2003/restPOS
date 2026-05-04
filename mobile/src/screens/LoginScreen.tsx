@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, TextInput,
+  View, Text, ScrollView, ActivityIndicator, TextInput, Pressable,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { ChevronLeft, RefreshCw, ArrowLeftRight } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { useAuth, User } from '../context/AuthContext';
 import { fetchActiveUsers, pinLogin } from '../api/client';
+import Button from '../components/ui/Button';
+import { showError } from '../lib/toast';
 
 export default function LoginScreen() {
   const { tenant, clearTenant, saveSession } = useAuth();
@@ -13,159 +18,147 @@ export default function LoginScreen() {
   const [pin, setPin] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => { load(); }, []);
-
   const load = async () => {
     setLoading(true);
     try {
-      const list = await fetchActiveUsers();
-      setUsers(list);
+      setUsers(await fetchActiveUsers());
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.error || e.message);
+      showError('Error', e?.response?.data?.error || e.message);
     } finally {
       setLoading(false);
     }
   };
+  useEffect(() => { load(); }, []);
 
   const submit = async () => {
     if (!picked || pin.length < 4) return;
     setSubmitting(true);
     try {
       const res = await pinLogin(picked.id, pin);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await saveSession(res.token, res.user);
     } catch (e: any) {
-      Alert.alert('PIN incorrecto', e?.response?.data?.error || e.message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showError('PIN incorrecto', e?.response?.data?.error || e.message);
       setPin('');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const changeRestaurant = () => {
-    Alert.alert(
-      '¿Cambiar restaurante?',
-      'Vas a perder la configuración de este dispositivo.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Sí, cambiar', style: 'destructive', onPress: () => clearTenant() },
-      ]
-    );
-  };
-
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator color="#3B82F6" size="large" />
+      <View className="flex-1 bg-bg-base items-center justify-center">
+        <ActivityIndicator color="#60A5FA" size="large" />
       </View>
     );
   }
 
+  if (picked) {
+    return <PinPad user={picked} pin={pin} setPin={setPin} onBack={() => { setPicked(null); setPin(''); }} onSubmit={submit} submitting={submitting} />;
+  }
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.tenantName}>{tenant?.name}</Text>
-          <Text style={styles.tenantSlug}>Selecciona tu usuario</Text>
+    <View className="flex-1 bg-bg-base">
+      {/* Header */}
+      <View className="px-5 pt-14 pb-4 flex-row items-center justify-between">
+        <View className="flex-1">
+          <Text className="text-ink-primary text-2xl font-bold" numberOfLines={1}>{tenant?.name}</Text>
+          <Text className="text-ink-muted text-sm mt-1">Selecciona tu usuario</Text>
         </View>
-        <TouchableOpacity onPress={changeRestaurant}>
-          <Text style={styles.changeText}>Cambiar</Text>
-        </TouchableOpacity>
+        <Pressable
+          onPress={() => clearTenant()}
+          className="px-3 py-2 flex-row items-center gap-1"
+        >
+          <ArrowLeftRight size={14} color="#60A5FA" />
+          <Text className="text-brand-400 text-sm">Cambiar</Text>
+        </Pressable>
       </View>
 
-      {!picked ? (
-        <ScrollView contentContainerStyle={styles.grid}>
-          {users.map(u => (
-            <TouchableOpacity
-              key={u.id}
-              style={[styles.userCard, { borderColor: u.avatar_color || '#3B82F6' }]}
-              onPress={() => { setPicked(u); setPin(''); }}
-            >
-              <View style={[styles.avatar, { backgroundColor: u.avatar_color || '#3B82F6' }]}>
-                <Text style={styles.avatarText}>{u.display_name.charAt(0).toUpperCase()}</Text>
-              </View>
-              <Text style={styles.userName} numberOfLines={1}>{u.display_name}</Text>
-              <Text style={styles.userRole}>{u.role}</Text>
-            </TouchableOpacity>
-          ))}
-          {users.length === 0 && (
-            <Text style={styles.emptyText}>No hay usuarios activos. Crea uno desde el desktop.</Text>
-          )}
-        </ScrollView>
-      ) : (
-        <View style={styles.pinBox}>
-          <TouchableOpacity onPress={() => setPicked(null)} style={styles.backBtn}>
-            <Text style={styles.backText}>‹ Volver</Text>
-          </TouchableOpacity>
-          <View style={[styles.avatarLg, { backgroundColor: picked.avatar_color || '#3B82F6' }]}>
-            <Text style={styles.avatarTextLg}>{picked.display_name.charAt(0).toUpperCase()}</Text>
+      {/* Grid */}
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        {users.length === 0 ? (
+          <View className="items-center py-16">
+            <Text className="text-ink-muted text-center mb-4">No hay usuarios activos en este restaurante.</Text>
+            <Button variant="secondary" size="md" onPress={load} leftIcon={<RefreshCw size={16} color="#F8FAFC" />}>
+              Reintentar
+            </Button>
           </View>
-          <Text style={styles.pickedName}>{picked.display_name}</Text>
-          <TextInput
-            style={styles.pinInput}
-            value={pin}
-            onChangeText={(v) => setPin(v.replace(/\D/g, '').slice(0, 8))}
-            placeholder="PIN"
-            placeholderTextColor="#64748B"
-            keyboardType="number-pad"
-            secureTextEntry
-            autoFocus
-            onSubmitEditing={submit}
-          />
-          <TouchableOpacity
-            style={[styles.button, (submitting || pin.length < 4) && { opacity: 0.5 }]}
-            onPress={submit}
-            disabled={submitting || pin.length < 4}
-          >
-            {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Entrar</Text>}
-          </TouchableOpacity>
-        </View>
-      )}
+        ) : (
+          <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+            {users.map(u => (
+              <Pressable
+                key={u.id}
+                onPress={() => { setPicked(u); Haptics.selectionAsync(); }}
+                style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1, width: '31%' })}
+                className="bg-bg-card border-2 border-bg-border rounded-2xl p-4 items-center"
+              >
+                <View
+                  style={{ backgroundColor: u.avatar_color || '#3B82F6' }}
+                  className="w-14 h-14 rounded-full items-center justify-center mb-2"
+                >
+                  <Text className="text-white text-2xl font-bold">{u.display_name.charAt(0).toUpperCase()}</Text>
+                </View>
+                <Text className="text-ink-primary font-semibold text-sm text-center" numberOfLines={1}>{u.display_name}</Text>
+                <Text className="text-ink-muted text-[10px] mt-0.5 capitalize">{u.role}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F172A', padding: 20 },
-  center: { justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, marginTop: 20 },
-  tenantName: { color: '#fff', fontSize: 22, fontWeight: '700' },
-  tenantSlug: { color: '#94A3B8', fontSize: 13, marginTop: 2 },
-  changeText: { color: '#93C5FD', fontSize: 14 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 40 },
-  userCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    width: '30%',
-    minWidth: 110,
-    borderWidth: 2,
-  },
-  avatar: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  avatarText: { color: '#fff', fontSize: 24, fontWeight: '700' },
-  userName: { color: '#fff', fontWeight: '600', fontSize: 14, textAlign: 'center' },
-  userRole: { color: '#94A3B8', fontSize: 11, textTransform: 'capitalize', marginTop: 2 },
-  emptyText: { color: '#94A3B8', textAlign: 'center', flex: 1, marginTop: 40 },
-  pinBox: { alignItems: 'center', marginTop: 40 },
-  backBtn: { alignSelf: 'flex-start', padding: 8 },
-  backText: { color: '#93C5FD', fontSize: 16 },
-  avatarLg: { width: 96, height: 96, borderRadius: 48, justifyContent: 'center', alignItems: 'center', marginBottom: 16, marginTop: 20 },
-  avatarTextLg: { color: '#fff', fontSize: 40, fontWeight: '700' },
-  pickedName: { color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 28 },
-  pinInput: {
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#334155',
-    color: '#fff',
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    fontSize: 28,
-    textAlign: 'center',
-    letterSpacing: 14,
-    width: '70%',
-    marginBottom: 20,
-  },
-  button: { backgroundColor: '#3B82F6', paddingVertical: 14, paddingHorizontal: 40, borderRadius: 12 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-});
+function PinPad({
+  user, pin, setPin, onBack, onSubmit, submitting,
+}: {
+  user: User; pin: string; setPin: (s: string) => void;
+  onBack: () => void; onSubmit: () => void; submitting: boolean;
+}) {
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 bg-bg-base">
+      <View className="px-5 pt-12">
+        <Pressable onPress={onBack} className="flex-row items-center self-start py-2">
+          <ChevronLeft size={20} color="#60A5FA" />
+          <Text className="text-brand-400 text-base ml-1">Volver</Text>
+        </Pressable>
+      </View>
+
+      <View className="flex-1 items-center justify-center px-6">
+        <View
+          style={{ backgroundColor: user.avatar_color || '#3B82F6' }}
+          className="w-24 h-24 rounded-full items-center justify-center mb-4"
+        >
+          <Text className="text-white text-4xl font-bold">{user.display_name.charAt(0).toUpperCase()}</Text>
+        </View>
+        <Text className="text-ink-primary text-2xl font-bold">{user.display_name}</Text>
+        <Text className="text-ink-muted text-sm capitalize mt-0.5 mb-8">{user.role}</Text>
+
+        <TextInput
+          value={pin}
+          onChangeText={(v) => setPin(v.replace(/\D/g, '').slice(0, 8))}
+          placeholder="• • • •"
+          placeholderTextColor="#475569"
+          keyboardType="number-pad"
+          secureTextEntry
+          autoFocus
+          onSubmitEditing={onSubmit}
+          className="bg-bg-card border border-bg-border rounded-2xl text-ink-primary text-3xl text-center mb-6"
+          style={{ paddingVertical: 18, width: '70%', letterSpacing: 14 }}
+        />
+
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={submitting}
+          disabled={pin.length < 4}
+          onPress={onSubmit}
+        >
+          Entrar
+        </Button>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}

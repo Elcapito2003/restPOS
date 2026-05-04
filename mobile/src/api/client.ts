@@ -241,3 +241,31 @@ export async function printReceipt(orderId: number): Promise<void> {
 export async function printComanda(orderId: number): Promise<void> {
   await api.post(`/printer/comanda/${orderId}`);
 }
+
+// ─── Shifts ───
+
+export interface Shift {
+  id: number;
+  user_id: number;
+  register_id: number;
+  starting_cash: number | string;
+  status: 'open' | 'closed';
+  opened_at: string;
+  closed_at: string | null;
+  notes: string | null;
+}
+
+export async function getMyShift(): Promise<Shift | null> {
+  const res = await api.get('/shifts/mine');
+  return res.data || null;
+}
+
+export async function openShift(startingCash: number, notes?: string): Promise<Shift> {
+  const res = await api.post('/shifts/open', { starting_cash: startingCash, notes: notes || undefined });
+  return res.data;
+}
+
+export async function closeShift(): Promise<Shift> {
+  const res = await api.post('/shifts/close');
+  return res.data;
+}

@@ -12,6 +12,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#0F172A"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 5000,
+      "url": "https://u.expo.dev/58b4ec8b-0c8e-4741-baaa-53094987758a"
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -19,8 +28,7 @@
       },
       "package": "com.restpos.comandero",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true
+      "predictiveBackGestureEnabled": false
     },
     "ios": {
       "supportsTablet": true,
@@ -28,6 +36,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "58b4ec8b-0c8e-4741-baaa-53094987758a"
+      }
+    },
+    "owner": "elcapito2003",
+    "plugins": [
+      "expo-build-properties"
+    ]
   }
 }

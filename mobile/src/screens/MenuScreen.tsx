@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert,
-  Modal, Animated,
+  View, Text, ScrollView, ActivityIndicator, Pressable,
+  Modal, Animated, TextInput,
 } from 'react-native';
+import { ChevronLeft, Check, X, ShoppingCart, ChevronRight } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import {
@@ -10,6 +12,8 @@ import {
   fetchCategoriesTree, fetchProducts, fetchModifierGroups,
   addOrderItem, createOrder, getOrderByTable,
 } from '../api/client';
+import Button from '../components/ui/Button';
+import { showError } from '../lib/toast';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Menu'>;
 
@@ -42,7 +46,7 @@ export default function MenuScreen({ route, navigation }: Props) {
           if (existing) setCurrentOrder(existing);
         }
       } catch (e: any) {
-        Alert.alert('Error', e?.message || 'No se pudo cargar el menú');
+        showError('Error', e?.message || 'No se pudo cargar el menú');
       } finally {
         setLoading(false);
       }
@@ -75,22 +79,21 @@ export default function MenuScreen({ route, navigation }: Props) {
   };
 
   const handleProductPress = (p: Product) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Siempre abrimos el picker — permite agregar notas aunque el producto no tenga modificadores
     const groups = modifierGroups.filter(g => g.product_ids?.includes(p.id));
-    if (groups.length === 0) {
-      addItemImmediate(p, []);
-    } else {
-      setPicker({ product: p, groups });
-    }
+    setPicker({ product: p, groups });
   };
 
-  const addItemImmediate = async (p: Product, modifiers: { modifier_id: number }[]) => {
+  const addItemImmediate = async (p: Product, modifiers: { modifier_id: number }[], notes?: string) => {
     try {
       const oid = await ensureOrder();
-      const updated = await addOrderItem(oid, { product_id: p.id, quantity: 1, modifiers });
+      const updated = await addOrderItem(oid, { product_id: p.id, quantity: 1, modifiers, notes: notes?.trim() || undefined });
       setCurrentOrder(updated);
       flashAdded(p.name);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.error || e?.message || 'No se pudo agregar');
+      showError('Error', e?.response?.data?.error || e?.message || 'No se pudo agregar');
     }
   };
 
@@ -103,100 +106,147 @@ export default function MenuScreen({ route, navigation }: Props) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>‹</Text>
-        </TouchableOpacity>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={styles.title}>{tableLabel}</Text>
-          <Text style={styles.subtitle}>Menú</Text>
+    <View className="flex-1 bg-bg-base">
+      {/* Header */}
+      <View className="px-4 pt-12 pb-3 flex-row items-center border-b border-bg-border">
+        <Pressable onPress={() => navigation.goBack()} className="p-2 -ml-2">
+          <ChevronLeft size={28} color="#60A5FA" />
+        </Pressable>
+        <View className="flex-1 items-center">
+          <Text className="text-ink-primary text-lg font-bold">{tableLabel}</Text>
+          <Text className="text-ink-muted text-xs">Menú</Text>
         </View>
-        <View style={{ width: 40 }} />
+        <View className="w-10" />
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color="#3B82F6" size="large" /></View>
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#60A5FA" size="large" />
+        </View>
       ) : (
         <>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catTabs} contentContainerStyle={{ paddingHorizontal: 10 }}>
-            {categories.map(c => (
-              <TouchableOpacity
-                key={c.id}
-                onPress={() => { setActiveRoot(c); setActiveSub(null); }}
-                style={[styles.catTab, activeRoot?.id === c.id && styles.catTabActive]}
-              >
-                <Text style={[styles.catTabText, activeRoot?.id === c.id && styles.catTabTextActive]}>{c.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {subcategories.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabs} contentContainerStyle={{ paddingHorizontal: 10 }}>
-              <TouchableOpacity
-                onPress={() => setActiveSub(null)}
-                style={[styles.subTab, !activeSub && styles.subTabActive]}
-              >
-                <Text style={[styles.subTabText, !activeSub && styles.subTabTextActive]}>Todos</Text>
-              </TouchableOpacity>
-              {subcategories.map(sc => (
-                <TouchableOpacity
-                  key={sc.id}
-                  onPress={() => setActiveSub(sc)}
-                  style={[styles.subTab, activeSub?.id === sc.id && styles.subTabActive]}
-                >
-                  <Text style={[styles.subTabText, activeSub?.id === sc.id && styles.subTabTextActive]}>{sc.name}</Text>
-                </TouchableOpacity>
-              ))}
+          {/* Categorías */}
+          <View className="border-b border-bg-border">
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', minHeight: 52 }}>
+              {categories.map(c => {
+                const active = activeRoot?.id === c.id;
+                return (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => { setActiveRoot(c); setActiveSub(null); Haptics.selectionAsync(); }}
+                    style={{ flexShrink: 0 }}
+                    className={`px-4 py-3 mx-1 ${active ? 'border-b-2 border-brand-500' : ''}`}
+                  >
+                    <Text className={`text-sm ${active ? 'text-ink-primary font-bold' : 'text-ink-muted'}`}>{c.name}</Text>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
+          </View>
+
+          {/* Subcategorías */}
+          {subcategories.length > 0 && (
+            <View style={{ paddingVertical: 10 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10, alignItems: 'center' }}>
+                <Pressable
+                  onPress={() => { setActiveSub(null); Haptics.selectionAsync(); }}
+                  style={{ minWidth: 70 }}
+                  className={`px-5 py-3 rounded-full items-center ${!activeSub ? 'bg-brand-500' : 'bg-bg-card border border-bg-border'}`}
+                >
+                  <Text className={`text-sm ${!activeSub ? 'text-white font-bold' : 'text-ink-secondary font-medium'}`}>Todos</Text>
+                </Pressable>
+                {subcategories.map(sc => {
+                  const active = activeSub?.id === sc.id;
+                  return (
+                    <Pressable
+                      key={sc.id}
+                      onPress={() => { setActiveSub(sc); Haptics.selectionAsync(); }}
+                      style={{ minWidth: 70 }}
+                      className={`px-5 py-3 rounded-full items-center ${active ? 'bg-brand-500' : 'bg-bg-card border border-bg-border'}`}
+                    >
+                      <Text className={`text-sm ${active ? 'text-white font-bold' : 'text-ink-secondary font-medium'}`}>{sc.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
           )}
 
-          <ScrollView contentContainerStyle={styles.productGrid}>
+          {/* Productos */}
+          <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 110 }}>
             {productLoading ? (
-              <ActivityIndicator color="#3B82F6" style={{ marginTop: 40 }} />
+              <ActivityIndicator color="#60A5FA" style={{ marginTop: 40 }} />
             ) : products.length === 0 ? (
-              <Text style={styles.emptyText}>Sin productos en esta categoría</Text>
-            ) : products.map(p => (
-              <TouchableOpacity key={p.id} style={styles.productCard} onPress={() => handleProductPress(p)}>
-                <Text style={styles.productName} numberOfLines={2}>{p.name}</Text>
-                <Text style={styles.productPrice}>${Number(p.price).toFixed(2)}</Text>
-              </TouchableOpacity>
-            ))}
+              <Text className="text-ink-muted text-center py-12">Sin productos en esta categoría</Text>
+            ) : (
+              <View className="flex-row flex-wrap" style={{ gap: 10 }}>
+                {products.map(p => (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => handleProductPress(p)}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1, width: '48.5%' })}
+                    className="bg-bg-card border border-bg-border rounded-2xl p-4 min-h-[88]"
+                  >
+                    <Text className="text-ink-primary font-semibold text-sm flex-1" numberOfLines={2}>{p.name}</Text>
+                    <Text className="text-brand-400 text-base font-bold mt-2">${Number(p.price).toFixed(2)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </ScrollView>
         </>
       )}
 
+      {/* Modificadores */}
       <Modal visible={!!picker} animationType="slide" transparent onRequestClose={() => setPicker(null)}>
         {picker && (
           <ModifierPicker
             product={picker.product}
             groups={picker.groups}
             onCancel={() => setPicker(null)}
-            onConfirm={async (selected) => {
+            onConfirm={async (selected, notes) => {
               setPicker(null);
-              await addItemImmediate(picker.product, selected.map(id => ({ modifier_id: id })));
+              await addItemImmediate(picker.product, selected.map(id => ({ modifier_id: id })), notes);
             }}
           />
         )}
       </Modal>
 
+      {/* Toast de "agregado" */}
       {justAdded && (
-        <Animated.View style={[styles.toast, { opacity: flashAnim, transform: [{ translateY: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }]} pointerEvents="none">
-          <Text style={styles.toastText}>✓ {justAdded} agregado</Text>
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            opacity: flashAnim,
+            transform: [{ translateY: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+            position: 'absolute', top: 80, alignSelf: 'center',
+          }}
+          className="bg-success px-4 py-2.5 rounded-full flex-row items-center gap-2"
+        >
+          <Check size={16} color="#fff" />
+          <Text className="text-white font-bold text-sm">{justAdded} agregado</Text>
         </Animated.View>
       )}
 
+      {/* Cart bar */}
       {currentOrder && pendingCount > 0 && (
-        <TouchableOpacity style={styles.cartBar} onPress={goToTicket} activeOpacity={0.85}>
-          <View style={styles.cartCountBadge}>
-            <Text style={styles.cartCountText}>{pendingCount}</Text>
+        <Pressable
+          onPress={goToTicket}
+          style={({ pressed }) => ({ opacity: pressed ? 0.9 : 1 })}
+          className="absolute left-3 right-3 bottom-4 bg-success rounded-2xl px-4 py-4 flex-row items-center"
+        >
+          <View className="bg-white w-9 h-9 rounded-full items-center justify-center mr-3">
+            <Text className="text-success font-bold text-base">{pendingCount}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cartTitle}>Ver ticket y enviar</Text>
-            <Text style={styles.cartSubtitle}>${orderTotal.toFixed(2)} · {pendingCount} ítem{pendingCount !== 1 ? 's' : ''} por enviar</Text>
+          <View className="flex-1">
+            <View className="flex-row items-center gap-1.5">
+              <ShoppingCart size={14} color="#fff" />
+              <Text className="text-white font-bold text-base">Ver ticket y enviar</Text>
+            </View>
+            <Text className="text-white/80 text-xs mt-0.5">${orderTotal.toFixed(2)} · {pendingCount} ítem{pendingCount !== 1 ? 's' : ''} por enviar</Text>
           </View>
-          <Text style={styles.cartArrow}>›</Text>
-        </TouchableOpacity>
+          <ChevronRight size={26} color="#fff" />
+        </Pressable>
       )}
     </View>
   );
@@ -208,23 +258,21 @@ function ModifierPicker({
   product: Product;
   groups: ModifierGroup[];
   onCancel: () => void;
-  onConfirm: (modifierIds: number[]) => void;
+  onConfirm: (modifierIds: number[], notes?: string) => void;
 }) {
-  const [selected, setSelected] = useState<Record<number, number[]>>({}); // groupId -> modifierIds[]
+  const [selected, setSelected] = useState<Record<number, number[]>>({});
+  const [notes, setNotes] = useState('');
 
   const toggle = (group: ModifierGroup, mod: Modifier) => {
+    Haptics.selectionAsync();
     setSelected(prev => {
       const current = prev[group.id] ?? [];
       const isSelected = current.includes(mod.id);
       if (group.max_selections === 1) {
         return { ...prev, [group.id]: isSelected ? [] : [mod.id] };
       }
-      if (isSelected) {
-        return { ...prev, [group.id]: current.filter(id => id !== mod.id) };
-      }
-      if (group.max_selections > 0 && current.length >= group.max_selections) {
-        return prev;
-      }
+      if (isSelected) return { ...prev, [group.id]: current.filter(id => id !== mod.id) };
+      if (group.max_selections > 0 && current.length >= group.max_selections) return prev;
       return { ...prev, [group.id]: [...current, mod.id] };
     });
   };
@@ -244,29 +292,29 @@ function ModifierPicker({
   const totalPrice = Number(product.price) + extra;
 
   return (
-    <View style={mpStyles.overlay}>
-      <View style={mpStyles.sheet}>
-        <View style={mpStyles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={mpStyles.title}>{product.name}</Text>
-            <Text style={mpStyles.price}>${totalPrice.toFixed(2)}</Text>
+    <View className="flex-1 bg-black/60 justify-end">
+      <View className="bg-bg-card rounded-t-3xl p-5 pb-8" style={{ maxHeight: '88%' }}>
+        <View className="flex-row items-start mb-4">
+          <View className="flex-1">
+            <Text className="text-ink-primary text-xl font-bold">{product.name}</Text>
+            <Text className="text-brand-400 text-base mt-1 font-semibold">${totalPrice.toFixed(2)}</Text>
           </View>
-          <TouchableOpacity onPress={onCancel}>
-            <Text style={mpStyles.closeText}>✕</Text>
-          </TouchableOpacity>
+          <Pressable onPress={onCancel} className="p-1">
+            <X size={22} color="#94A3B8" />
+          </Pressable>
         </View>
 
-        <ScrollView style={{ maxHeight: 420 }}>
+        <ScrollView style={{ maxHeight: 460 }}>
           {groups.map(g => {
             const selectedCount = (selected[g.id] ?? []).length;
             const rangeText = g.max_selections === 1
               ? (g.is_required ? 'Elige 1' : 'Elige hasta 1')
               : `Elige ${g.min_selections}${g.max_selections > 0 ? `-${g.max_selections}` : '+'}`;
             return (
-              <View key={g.id} style={mpStyles.group}>
-                <View style={mpStyles.groupHeader}>
-                  <Text style={mpStyles.groupName}>{g.name}</Text>
-                  <Text style={[mpStyles.groupHint, g.is_required && { color: '#EF4444' }]}>
+              <View key={g.id} className="mb-4">
+                <View className="flex-row justify-between items-baseline mb-2">
+                  <Text className="text-ink-primary font-semibold text-base">{g.name}</Text>
+                  <Text className={`text-xs ${g.is_required ? 'text-danger' : 'text-ink-muted'}`}>
                     {rangeText}{g.is_required ? ' · requerido' : ''}
                   </Text>
                 </View>
@@ -274,108 +322,58 @@ function ModifierPicker({
                   const isSelected = (selected[g.id] ?? []).includes(m.id);
                   const extraNum = Number(m.price_extra);
                   return (
-                    <TouchableOpacity
+                    <Pressable
                       key={m.id}
-                      style={[mpStyles.modRow, isSelected && mpStyles.modRowActive]}
                       onPress={() => toggle(g, m)}
+                      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+                      className={`flex-row items-center rounded-xl p-3 mb-1.5 border ${isSelected ? 'bg-brand-700/30 border-brand-500' : 'bg-bg-elevated border-bg-border'}`}
                     >
-                      <View style={[mpStyles.check, isSelected && mpStyles.checkOn]}>
-                        {isSelected && <Text style={{ color: '#fff', fontWeight: '700' }}>✓</Text>}
+                      <View className={`w-6 h-6 rounded-full border-2 items-center justify-center mr-3 ${isSelected ? 'bg-brand-500 border-brand-500' : 'border-bg-border'}`}>
+                        {isSelected && <Check size={14} color="#fff" />}
                       </View>
-                      <Text style={[mpStyles.modName, isSelected && { color: '#fff' }]}>{m.name}</Text>
+                      <Text className={`flex-1 ${isSelected ? 'text-ink-primary font-medium' : 'text-ink-secondary'}`}>{m.name}</Text>
                       {extraNum !== 0 && (
-                        <Text style={mpStyles.modExtra}>
+                        <Text className="text-brand-400 text-sm ml-2">
                           {extraNum > 0 ? '+' : ''}${Math.abs(extraNum).toFixed(2)}
                         </Text>
                       )}
-                    </TouchableOpacity>
+                    </Pressable>
                   );
                 })}
                 {g.is_required && selectedCount < Math.max(1, g.min_selections) && (
-                  <Text style={mpStyles.requiredHint}>Falta seleccionar</Text>
+                  <Text className="text-danger text-xs mt-1 ml-1">Falta seleccionar</Text>
                 )}
               </View>
             );
           })}
+
+          {/* Nota opcional para el item */}
+          <View className="mb-4">
+            <Text className="text-ink-primary font-semibold text-base mb-2">Nota (opcional)</Text>
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Ej. sin azúcar, bien cocido, sin cebolla..."
+              placeholderTextColor="#475569"
+              multiline
+              numberOfLines={2}
+              className="bg-bg-elevated border border-bg-border rounded-xl px-3 py-2.5 text-ink-primary"
+              style={{ minHeight: 56, textAlignVertical: 'top' }}
+            />
+            <Text className="text-ink-muted text-xs mt-1">Se imprime en cocina y aparece en el ticket</Text>
+          </View>
         </ScrollView>
 
-        <TouchableOpacity
-          style={[mpStyles.confirmBtn, !canConfirm && { opacity: 0.4 }]}
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
           disabled={!canConfirm}
-          onPress={() => onConfirm(flatIds)}
+          onPress={() => onConfirm(flatIds, notes)}
         >
-          <Text style={mpStyles.confirmText}>Agregar · ${totalPrice.toFixed(2)}</Text>
-        </TouchableOpacity>
+          Agregar · ${totalPrice.toFixed(2)}
+        </Button>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F172A' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 16, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#1E293B' },
-  backBtn: { width: 40 },
-  backText: { color: '#93C5FD', fontSize: 32 },
-  title: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  subtitle: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
-  cartBtn: { backgroundColor: '#3B82F6', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
-  cartBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  catTabs: { maxHeight: 48, borderBottomWidth: 1, borderBottomColor: '#1E293B' },
-  catTab: { paddingHorizontal: 16, paddingVertical: 12, marginRight: 4 },
-  catTabActive: { borderBottomWidth: 2, borderBottomColor: '#3B82F6' },
-  catTabText: { color: '#94A3B8', fontSize: 14, fontWeight: '500' },
-  catTabTextActive: { color: '#fff', fontWeight: '700' },
-  subTabs: { maxHeight: 44, paddingVertical: 6 },
-  subTab: { paddingHorizontal: 12, paddingVertical: 6, marginRight: 6, backgroundColor: '#1E293B', borderRadius: 8 },
-  subTabActive: { backgroundColor: '#3B82F6' },
-  subTabText: { color: '#94A3B8', fontSize: 12 },
-  subTabTextActive: { color: '#fff' },
-  productGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 10, paddingBottom: 120 },
-  productCard: { width: '48%', backgroundColor: '#1E293B', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#334155', minHeight: 80, justifyContent: 'space-between' },
-  productName: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  productPrice: { color: '#93C5FD', fontSize: 16, fontWeight: '700', marginTop: 6 },
-  emptyText: { color: '#64748B', flex: 1, textAlign: 'center', marginTop: 40 },
-  toast: {
-    position: 'absolute', top: 90, alignSelf: 'center',
-    backgroundColor: '#22C55E', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
-  },
-  toastText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  cartBar: {
-    position: 'absolute', left: 10, right: 10, bottom: 14,
-    backgroundColor: '#22C55E', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 14,
-    flexDirection: 'row', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 8,
-  },
-  cartCountBadge: {
-    backgroundColor: '#fff', width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center', marginRight: 12,
-  },
-  cartCountText: { color: '#16A34A', fontWeight: '800', fontSize: 16 },
-  cartTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  cartSubtitle: { color: '#DCFCE7', fontSize: 12, marginTop: 2 },
-  cartArrow: { color: '#fff', fontSize: 28, fontWeight: '700', marginLeft: 6 },
-});
-
-const mpStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#1E293B', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, paddingBottom: 30, maxHeight: '85%' },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
-  title: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  price: { color: '#93C5FD', fontSize: 16, marginTop: 4 },
-  closeText: { color: '#94A3B8', fontSize: 22, padding: 6 },
-  group: { marginBottom: 16 },
-  groupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 },
-  groupName: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  groupHint: { color: '#64748B', fontSize: 11 },
-  modRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F172A', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#1E293B' },
-  modRowActive: { borderColor: '#3B82F6', backgroundColor: '#1E3A8A' },
-  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#475569', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  checkOn: { backgroundColor: '#3B82F6', borderColor: '#3B82F6' },
-  modName: { color: '#CBD5E1', fontSize: 14, flex: 1 },
-  modExtra: { color: '#93C5FD', fontSize: 13, marginLeft: 8 },
-  requiredHint: { color: '#EF4444', fontSize: 11, marginTop: 4, marginLeft: 4 },
-  confirmBtn: { backgroundColor: '#3B82F6', paddingVertical: 16, borderRadius: 14, marginTop: 12 },
-  confirmText: { color: '#fff', fontSize: 16, fontWeight: '700', textAlign: 'center' },
-});
