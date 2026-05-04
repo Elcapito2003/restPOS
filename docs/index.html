@@ -296,10 +296,10 @@
 
       <div class="grid sm:grid-cols-2 gap-6 max-w-xl mx-auto">
         <!-- Windows -->
-        <a href="https://github.com/Elcapito2003/restPOS/releases/latest/download/RestPOS-Setup-2.2.0.exe" class="download-btn rounded-2xl p-6 text-center block">
+        <a id="download-windows" href="https://github.com/Elcapito2003/restPOS/releases/latest" class="download-btn rounded-2xl p-6 text-center block">
           <svg class="w-12 h-12 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
           <div class="font-bold text-lg">Windows</div>
-          <div class="text-sm opacity-80 mt-1">Windows 10/11 (64-bit)</div>
+          <div class="text-sm opacity-80 mt-1" id="download-version">Windows 10/11 (64-bit)</div>
         </a>
 
         <!-- Android (coming soon) -->
@@ -331,6 +331,30 @@
       </a>
     </div>
   </footer>
+
+  <script>
+    // Resolver dinámicamente el .exe del último release vía GitHub API
+    (async () => {
+      try {
+        const r = await fetch('https://api.github.com/repos/Elcapito2003/restPOS/releases/latest');
+        if (!r.ok) return;
+        const release = await r.json();
+        const exeAsset = release.assets.find(a => a.name.endsWith('.exe'));
+        if (!exeAsset) return;
+        const btn = document.getElementById('download-windows');
+        const ver = document.getElementById('download-version');
+        if (btn) btn.href = exeAsset.browser_download_url;
+        if (ver) ver.textContent = 'Windows 10/11 (64-bit) — ' + release.tag_name;
+        // También actualizar el badge del hero
+        document.querySelectorAll('[data-version-badge]').forEach(el => {
+          el.textContent = release.tag_name + ' - Disponible para Windows';
+        });
+      } catch (e) {
+        // Fallback: el href apunta a /releases/latest (página, no archivo) — el usuario navega manualmente
+        console.warn('No se pudo resolver el release latest:', e);
+      }
+    })();
+  </script>
 
 </body>
 </html>
