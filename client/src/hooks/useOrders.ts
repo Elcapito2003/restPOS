@@ -84,33 +84,9 @@ export function useSendToKitchen() {
       qc.setQueryData(['orders', data.id], data);
       qc.invalidateQueries({ queryKey: ['orders'] });
       toast.success('Orden enviada');
-
-      // Local printing via Electron
-      if ((window as any).electronPrint) {
-        try {
-          const settingsRes = await api.get('/settings');
-          const settings = settingsRes.data;
-          const printerSettings = {
-            kitchen: settings.printer_kitchen_ip || '',
-            bar: settings.printer_bar_ip || '',
-            cashier: settings.printer_cashier_ip || '',
-          };
-          const sentItems = data.items?.filter((i: any) => i.status === 'sent') || [];
-          if (sentItems.length > 0) {
-            const results = await (window as any).electronPrint.printComanda({
-              order: data,
-              items: sentItems,
-              printerSettings,
-            });
-            const failed = results?.filter((r: any) => r.status === 'failed');
-            if (failed?.length > 0) {
-              toast.error(`Error impresora: ${failed[0].error}`);
-            }
-          }
-        } catch (err: any) {
-          console.error('[LOCAL-PRINT] Error:', err);
-        }
-      }
+      // La impresión la dispara el server vía socket 'print:comanda' (capturado por
+      // usePrintListener) — antes había un printComanda local aquí que imprimía con
+      // TODOS los items 'sent' (no solo los recién enviados) y duplicaba prints.
     },
   });
 }
