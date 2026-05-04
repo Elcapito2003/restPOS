@@ -103,7 +103,7 @@ function setupPrintHandlers() {
             printer.bold(false);
             if (item.modifiers) {
               for (const mod of item.modifiers) {
-                printer.println(`   > ${mod.name}`);
+                printer.println(`   > ${mod.name || mod.modifier_name || ''}`);
               }
             }
             if (item.notes) printer.println(`   * ${item.notes}`);
@@ -140,7 +140,7 @@ function setupPrintHandlers() {
             printer.bold(false);
             if (item.modifiers) {
               for (const mod of item.modifiers) {
-                printer.println(`   > ${mod.name}`);
+                printer.println(`   > ${mod.name || mod.modifier_name || ''}`);
               }
             }
             if (item.notes) printer.println(`   * ${item.notes}`);
@@ -187,10 +187,12 @@ function setupPrintHandlers() {
         ]);
         if (item.modifiers) {
           for (const mod of item.modifiers) {
-            if (parseFloat(mod.price) > 0) {
-              printer.println(`   + ${mod.name} $${parseFloat(mod.price).toFixed(2)}`);
+            const modName = mod.name || mod.modifier_name || '';
+            const modPrice = parseFloat(mod.price ?? mod.price_extra ?? 0);
+            if (modPrice > 0) {
+              printer.println(`   + ${modName} $${modPrice.toFixed(2)}`);
             } else {
-              printer.println(`   > ${mod.name}`);
+              printer.println(`   > ${modName}`);
             }
           }
         }

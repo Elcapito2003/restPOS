@@ -69,25 +69,10 @@ export default function PaymentPage() {
         setClosed(true);
         setLastChange(res.data.change || 0);
         toast.success('Pago completado');
-        // Print receipt locally if in Electron, otherwise use server
-        try {
-          if ((window as any).electronPrint) {
-            const orderRes = await api.get(`/orders/${orderId}`);
-            const orderData = orderRes.data;
-            const paymentsData = (await api.get(`/payments/order/${orderId}`)).data;
-            const settingsRes = await api.get('/settings');
-            const s = settingsRes.data;
-            await (window as any).electronPrint.printReceipt({
-              order: orderData,
-              items: orderData.items?.filter((i: any) => i.status !== 'cancelled') || [],
-              payments: paymentsData,
-              restaurantName: s.restaurant_name || 'Restaurante',
-              printerSettings: { kitchen: s.printer_kitchen_ip || '', bar: s.printer_bar_ip || '', cashier: s.printer_cashier_ip || '' },
-            });
-          } else {
-            await api.post(`/printer/receipt/${orderId}`);
-          }
-        } catch {}
+        // El auto-print de la cuenta se quitó: el usuario prefiere imprimir
+        // sólo cuando aprieta explícitamente el botón "Imprimir" desde la
+        // pantalla de orden. Esto evita el doble ticket (uno por imprimir +
+        // otro por cobrar) y deja al cajero el control de cuándo se imprime.
       } else {
         toast.success(`Pago parcial registrado - Resta: ${fmt(res.data.remaining)}`);
         // Reset form for next payment
