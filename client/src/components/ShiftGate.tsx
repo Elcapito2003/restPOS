@@ -1,5 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Clock, DollarSign, LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../config/api';
@@ -37,6 +38,7 @@ function FullScreenLoading() {
 function ForcedShiftModal() {
   const { user, logout } = useAuth();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [startingCash, setStartingCash] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -62,7 +64,7 @@ function ForcedShiftModal() {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/login';
+    navigate('/login', { replace: true });
   };
 
   return (
