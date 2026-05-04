@@ -159,22 +159,31 @@ export async function removeItem(orderId: number, itemId: number) {
 }
 
 export async function sendToKitchen(orderId: number) {
-  await query(`UPDATE order_items SET status = 'sent', sent_at = NOW() WHERE order_id = $1 AND status = 'pending'`, [orderId]);
+  // Marcar solo los pending y devolver los IDs marcados ahora — así sólo imprimimos lo nuevo,
+  // no los items que ya fueron enviados antes en envíos previos de la misma orden.
+  const sentNow = await query(
+    `UPDATE order_items SET status = 'sent', sent_at = NOW() WHERE order_id = $1 AND status = 'pending' RETURNING id`,
+    [orderId]
+  );
+  const newlySentIds: number[] = sentNow.rows.map((r: any) => r.id);
+
   await query(`UPDATE orders SET status = 'sent', updated_at = NOW() WHERE id = $1`, [orderId]);
 
   const order = await getById(orderId);
 
-  // Items con modifiers para enviar al cliente Electron que tiene las impresoras locales
-  const itemsRes = await query(`
-    SELECT oi.id, oi.product_id, oi.product_name, oi.quantity, oi.unit_price, oi.notes,
-           oi.printer_target, oi.status,
-           json_agg(json_build_object('name', oim.modifier_name, 'price', oim.price_extra))
-             FILTER (WHERE oim.id IS NOT NULL) AS modifiers
-    FROM order_items oi
-    LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
-    WHERE oi.order_id = $1 AND oi.status = 'sent'
-    GROUP BY oi.id
-  `, [orderId]);
+  // Items con modifiers para enviar al cliente Electron — SOLO los recién enviados
+  const itemsRes = newlySentIds.length === 0
+    ? { rows: [] as any[] }
+    : await query(`
+        SELECT oi.id, oi.product_id, oi.product_name, oi.quantity, oi.unit_price, oi.notes,
+               oi.printer_target, oi.status,
+               json_agg(json_build_object('name', oim.modifier_name, 'price', oim.price_extra))
+                 FILTER (WHERE oim.id IS NOT NULL) AS modifiers
+        FROM order_items oi
+        LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
+        WHERE oi.id = ANY($1::int[])
+        GROUP BY oi.id
+      `, [newlySentIds]);
 
   // Settings de impresoras (las IPs son locales del restaurante; el server no las usa, se las pasa al Electron)
   const settingsRes = await query(`SELECT key, value FROM settings WHERE key IN ('printer_kitchen_ip','printer_bar_ip','printer_cashier_ip')`);
@@ -190,11 +199,16 @@ export async function sendToKitchen(orderId: number) {
     getIO().emit('order:updated', order);
     // Solicitar impresión local — el cliente Electron del restaurante escucha y dispara print local.
     // El server cloud NO puede imprimir directamente porque las impresoras están detrás de NAT.
-    getIO().emit('print:comanda', {
-      order,
-      items: itemsRes.rows,
-      printerSettings,
-    });
+    // printRequestId es único por envío para que el cliente pueda deduplicar si recibe el mismo
+    // evento múltiples veces (p.ej. dos instancias Electron conectadas).
+    if (itemsRes.rows.length > 0) {
+      getIO().emit('print:comanda', {
+        printRequestId: `${order.id}-${Date.now()}`,
+        order,
+        items: itemsRes.rows,
+        printerSettings,
+      });
+    }
   } catch {}
 
   return order;
