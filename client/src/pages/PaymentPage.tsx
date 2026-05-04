@@ -5,6 +5,7 @@ import { PAYMENT_METHODS } from '../config/constants';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import { DollarSign, CreditCard, ArrowLeft, Check, Users } from 'lucide-react';
+import { openCashDrawer } from '../lib/cashDrawer';
 
 const fmt = (n: number) => `$${n.toFixed(2)}`;
 
@@ -69,10 +70,10 @@ export default function PaymentPage() {
         setClosed(true);
         setLastChange(res.data.change || 0);
         toast.success('Pago completado');
-        // El auto-print de la cuenta se quitó: el usuario prefiere imprimir
-        // sólo cuando aprieta explícitamente el botón "Imprimir" desde la
-        // pantalla de orden. Esto evita el doble ticket (uno por imprimir +
-        // otro por cobrar) y deja al cajero el control de cuándo se imprime.
+        // Abre el cajón después de cualquier cobro completado (cualquier método)
+        openCashDrawer({ silent: true });
+        // El auto-print de la cuenta se quitó: el usuario imprime cuando aprieta
+        // el botón "Imprimir" desde la pantalla de orden.
       } else {
         toast.success(`Pago parcial registrado - Resta: ${fmt(res.data.remaining)}`);
         // Reset form for next payment

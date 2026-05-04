@@ -247,6 +247,21 @@ function setupPrintHandlers() {
     }
   });
 
+  ipcMain.handle('print:open-drawer', async (_event, data) => {
+    const address = data?.address;
+    const iface = resolvePrinterInterface(address);
+    if (!iface) return { status: 'no_printer', message: 'No hay impresora de caja configurada' };
+    try {
+      const printer = createPrinter(iface);
+      printer.openCashDrawer();
+      await executeWithRetry(printer, 'cashier-drawer');
+      return { status: 'ok' };
+    } catch (err) {
+      console.error('[LOCAL-PRINTER] open-drawer error:', err && err.message);
+      return { status: 'error', message: err && err.message };
+    }
+  });
+
   ipcMain.handle('print:test', async (_event, data) => {
     const { target, address } = data;
     const iface = resolvePrinterInterface(address);

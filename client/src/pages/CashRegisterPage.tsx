@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../config/api';
 import toast from 'react-hot-toast';
-import { DollarSign, ArrowUp, ArrowDown, Lock, X, Check, ShieldCheck, Keyboard, LogIn } from 'lucide-react';
+import { DollarSign, ArrowUp, ArrowDown, Lock, X, Check, ShieldCheck, Keyboard, LogIn, Inbox } from 'lucide-react';
+import { openCashDrawer } from '../lib/cashDrawer';
 import dayjs from 'dayjs';
 import { useAuth } from '../context/AuthContext';
 
@@ -287,6 +288,9 @@ export default function CashRegisterPage() {
       <div className="flex gap-2">
         <button onClick={handleStartMovement} className="btn-primary flex-1 gap-2">
           <DollarSign size={18} /> Retiro / Depósito
+        </button>
+        <button onClick={() => openCashDrawer()} className="btn-secondary gap-2">
+          <Inbox size={18} /> Abrir cajón
         </button>
       </div>
 
