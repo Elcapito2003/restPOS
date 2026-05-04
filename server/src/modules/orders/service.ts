@@ -2,6 +2,7 @@ import { query, getClient } from '../../config/database';
 import { getIO } from '../../config/socket';
 import { getNextDailyNumber } from '../../utils';
 import { printComanda } from '../printer/service';
+import { emitPrintToTenant } from '../../config/socket';
 
 export async function getById(id: number) {
   const result = await query(`
@@ -158,7 +159,7 @@ export async function removeItem(orderId: number, itemId: number) {
   return getById(orderId);
 }
 
-export async function sendToKitchen(orderId: number) {
+export async function sendToKitchen(orderId: number, tenantId?: string) {
   // Marcar solo los pending y devolver los IDs marcados ahora — así sólo imprimimos lo nuevo,
   // no los items que ya fueron enviados antes en envíos previos de la misma orden.
   const sentNow = await query(
@@ -197,17 +198,19 @@ export async function sendToKitchen(orderId: number) {
   try {
     getIO().to('kitchen').emit('order:sent', order);
     getIO().emit('order:updated', order);
-    // Solicitar impresión local — el cliente Electron del restaurante escucha y dispara print local.
-    // El server cloud NO puede imprimir directamente porque las impresoras están detrás de NAT.
-    // printRequestId es único por envío para que el cliente pueda deduplicar si recibe el mismo
-    // evento múltiples veces (p.ej. dos instancias Electron conectadas).
+    // Solicitar impresión local SOLO al primary print host del tenant. El server cloud no puede
+    // imprimir directo (NAT), y emitir broadcast causaría duplicados si hay múltiples Electrons
+    // del mismo restaurante conectados (PC local + laptop).
     if (itemsRes.rows.length > 0) {
-      getIO().emit('print:comanda', {
+      const payload = {
         printRequestId: `${order.id}-${Date.now()}`,
         order,
         items: itemsRes.rows,
         printerSettings,
-      });
+      };
+      // Emit dirigido al primary print host del tenant. Fallback a broadcast si no
+      // hay tenantId (legacy single-tenant) o no hay print host registrado.
+      emitPrintToTenant(tenantId, 'print:comanda', payload);
     }
   } catch {}
 

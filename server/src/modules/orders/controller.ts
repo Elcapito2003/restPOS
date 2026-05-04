@@ -50,7 +50,7 @@ export async function removeItem(req: Request, res: Response) {
 }
 
 export async function sendToKitchen(req: Request, res: Response) {
-  const order = await service.sendToKitchen(+req.params.id);
+  const order = await service.sendToKitchen(+req.params.id, req.tenantId);
   res.json(order);
 }
 
