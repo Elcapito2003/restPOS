@@ -51,6 +51,39 @@ async function logPrintJob(type: string, printerTarget: string, orderId: number 
   );
 }
 
+/**
+ * Ejecuta un print con retry exponential backoff.
+ * Las impresoras IP entran en modo sleep después de inactividad. La primera conexión
+ * suele fallar con timeout porque la impresora tarda en despertar; el segundo intento
+ * usualmente funciona. 3 intentos cubren ~99% de los casos.
+ */
+async function executePrinterWithRetry(printer: any, target: string, maxAttempts = 3): Promise<void> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await printer.execute();
+      if (attempt > 1) {
+        console.log(`[printer:${target}] OK en intento ${attempt}/${maxAttempts}`);
+      }
+      return;
+    } catch (err: any) {
+      lastError = err;
+      const isTimeout = /timeout|ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH/i.test(err?.message || '');
+      console.warn(`[printer:${target}] intento ${attempt}/${maxAttempts} falló: ${err?.message}`);
+      if (attempt < maxAttempts && isTimeout) {
+        // Backoff: 400ms, 1200ms, etc. (la primera espera "despierta" la impresora)
+        const wait = 400 * Math.pow(3, attempt - 1);
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
+const PRINTER_TIMEOUT = 10000; // 10s — antes era 5s, ahora más generoso para IP que despiertan
+
 export async function printComanda(orderId: number) {
   const orderResult = await query(`
     SELECT o.*, t.label as table_label, u.display_name as waiter_name
@@ -97,7 +130,7 @@ export async function printComanda(orderId: number) {
         const printer = new ThermalPrinter({
           type: PrinterTypes.EPSON,
           interface: iface,
-          options: { timeout: 5000 },
+          options: { timeout: PRINTER_TIMEOUT },
         });
 
         printer.alignCenter();
@@ -125,7 +158,7 @@ export async function printComanda(orderId: number) {
 
         printer.drawLine();
         printer.cut();
-        await printer.execute();
+        await executePrinterWithRetry(printer, 'kitchen');
         await logPrintJob('comanda', 'kitchen', orderId, 'printed');
         results.push({ target: 'kitchen', status: 'printed' });
       } catch (err: any) {
@@ -150,7 +183,7 @@ export async function printComanda(orderId: number) {
         const printer = new ThermalPrinter({
           type: PrinterTypes.EPSON,
           interface: iface,
-          options: { timeout: 5000 },
+          options: { timeout: PRINTER_TIMEOUT },
         });
 
         printer.alignCenter();
@@ -171,7 +204,7 @@ export async function printComanda(orderId: number) {
 
         printer.drawLine();
         printer.cut();
-        await printer.execute();
+        await executePrinterWithRetry(printer, 'bar');
         await logPrintJob('comanda', 'bar', orderId, 'printed');
         results.push({ target: 'bar', status: 'printed' });
       } catch (err: any) {
@@ -296,7 +329,7 @@ export async function printReceipt(orderId: number) {
       printer.alignCenter();
       printer.println('¡Gracias por su visita!');
       printer.cut();
-      await printer.execute();
+      await executePrinterWithRetry(printer, 'cashier');
       await logPrintJob('receipt', 'cashier', orderId, 'printed');
       return { status: 'printed' };
     } catch (err: any) {
@@ -330,7 +363,7 @@ export async function testPrinter(target: string) {
     printer.println(`Destino: ${target}`);
     printer.println(new Date().toLocaleString('es-MX'));
     printer.cut();
-    await printer.execute();
+    await executePrinterWithRetry(printer, target);
     await logPrintJob('test', target, null, 'printed');
     return { status: 'ok' };
   } catch (err: any) {
