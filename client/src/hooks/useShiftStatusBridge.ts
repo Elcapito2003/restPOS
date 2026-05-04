@@ -4,13 +4,12 @@ import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
 
 /**
- * Notifica al main de Electron si hay algún turno abierto en el tenant.
- * El main usa esa señal para bloquear el cierre de la ventana con un dialog
- * de confirmación, evitando que se cierre la app accidentalmente con la caja
- * todavía abierta.
+ * Notifica al main de Electron si hay turnos abiertos del tenant para bloquear
+ * cierre accidental. El admin queda exento — siempre puede cerrar la app sin
+ * el dialog de confirmación (puede ser dueño que necesita reiniciar PC, etc.).
  */
 export function useShiftStatusBridge() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const restpos = (window as any).restpos;
 
   const { data: openShifts } = useQuery<any[]>({
@@ -24,6 +23,8 @@ export function useShiftStatusBridge() {
   useEffect(() => {
     if (!restpos?.setShiftStatus) return;
     const hasOpen = Array.isArray(openShifts) && openShifts.length > 0;
-    restpos.setShiftStatus(hasOpen);
-  }, [openShifts, restpos]);
+    const isAdmin = user?.role === 'admin';
+    // Admin siempre puede cerrar; los demás roles ven el dialog si hay turno abierto
+    restpos.setShiftStatus(hasOpen && !isAdmin);
+  }, [openShifts, restpos, user]);
 }

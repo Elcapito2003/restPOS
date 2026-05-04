@@ -138,7 +138,7 @@ export default function OrderPage() {
     setNavCat(null);
     setNavLevel(0);
   };
-  const { data: orderByTable, refetch: refetchOrderByTable } = useOrderByTable(tableId);
+  const { data: orderByTable, refetch: refetchOrderByTable, isLoading: orderByTableLoading } = useOrderByTable(tableId);
   const { data: orderById, refetch: refetchOrderById } = useOrder(quickOrderId);
   const order = isQuickMode ? orderById : orderByTable;
   const refetchOrder = isQuickMode ? refetchOrderById : refetchOrderByTable;
@@ -226,7 +226,16 @@ export default function OrderPage() {
 
   // Auto-create order for table mode
   useEffect(() => {
-    if (tableId && !order && !createOrder.isPending && !isQuickMode) {
+    // Sólo crear si la query terminó (no isLoading) Y resolvió con null (no hay orden activa).
+    // Antes el useEffect disparaba durante el loading y creaba órdenes duplicadas, dejando
+    // huérfana la orden anterior que el cliente no veía.
+    if (
+      tableId &&
+      !isQuickMode &&
+      !orderByTableLoading &&
+      orderByTable === null &&
+      !createOrder.isPending
+    ) {
       createOrder.mutate({ table_id: tableId }, {
         onSuccess: () => refetchOrder(),
         onError: (err: any) => {
@@ -234,7 +243,7 @@ export default function OrderPage() {
         },
       });
     }
-  }, [tableId, order]);
+  }, [tableId, orderByTable, orderByTableLoading, isQuickMode]);
 
   // Auto-create order for quick mode
   useEffect(() => {

@@ -23,7 +23,17 @@ export function useOrder(id: number | null) {
 export function useOrderByTable(tableId: number | null) {
   return useQuery({
     queryKey: ['orders', 'table', tableId],
-    queryFn: () => api.get(`/orders/table/${tableId}`).then(r => r.data),
+    queryFn: async () => {
+      try {
+        const r = await api.get(`/orders/table/${tableId}`);
+        return r.data;
+      } catch (e: any) {
+        // Server regresa 404 cuando no hay orden activa — lo tratamos como null
+        // (no undefined) para distinguir "no existe" de "aún cargando".
+        if (e?.response?.status === 404) return null;
+        throw e;
+      }
+    },
     enabled: !!tableId,
     retry: false,
   });
