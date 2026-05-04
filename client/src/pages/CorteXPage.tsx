@@ -115,8 +115,8 @@ export default function CorteXPage() {
         <ReceiptLine left="+VALES:" right={fmt(0)} />
         <ReceiptLine left="+OTROS:" right={fmt(0)} />
         <ReceiptLine left="+DEPÓSITOS EFECTIVO:" right={fmt(d.movements_in)} />
-        <ReceiptLine left="-RETIROS EFECTIVO:" right={fmt(d.movements_out)} />
-        <ReceiptLine left="-PROPINAS PAGADAS:" right={fmt(d.total_tips)} />
+        <ReceiptLine left="-RETIROS EFECTIVO:" right={fmt((d.movements_out || 0) - (d.tip_payments || 0))} />
+        <ReceiptLine left="-PROPINAS PAGADAS:" right={fmt(d.tip_payments || 0)} />
         <div className="opacity-50">{USCORE}</div>
         <ReceiptLine left="=SALDO FINAL:" right={fmt(d.saldo_final)} bold />
         <ReceiptLine left="EFECTIVO FINAL:" right={fmt(d.expected_cash)} bold />

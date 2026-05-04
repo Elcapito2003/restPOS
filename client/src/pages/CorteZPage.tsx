@@ -107,7 +107,9 @@ export default function CorteZPage() {
           <span className="text-gray-500">Entradas de efectivo:</span>
           <span className="text-right font-medium text-emerald-600">+${result.movements_in.toFixed(2)}</span>
           <span className="text-gray-500">Salidas de efectivo:</span>
-          <span className="text-right font-medium text-red-600">-${result.movements_out.toFixed(2)}</span>
+          <span className="text-right font-medium text-red-600">-${((result.movements_out || 0) - (result.tip_payments || 0)).toFixed(2)}</span>
+          <span className="text-gray-500">Propinas pagadas:</span>
+          <span className="text-right font-medium text-red-600">-${(result.tip_payments || 0).toFixed(2)}</span>
           <div className="col-span-2 border-t my-1" />
           <span className="font-bold">Efectivo en caja:</span>
           <span className="text-right font-bold text-lg">${result.expected_cash.toFixed(2)}</span>

@@ -44,6 +44,87 @@ export async function getMovements(registerId: number) {
   return result.rows;
 }
 
+// ─── Propinas ──────────────────────────────────────────
+//
+// Mientras la caja está abierta, las propinas se acumulan por mesero (de pagos
+// con cualquier método). El cajero las paga al cerrar el turno o cuando quiera,
+// generando un cash_movement type='out' con reference='tip_payment:{waiterId}'
+// para que se reste automáticamente del expected_cash.
+
+const TIP_PAYMENT_REF_PREFIX = 'tip_payment:';
+
+export async function getPendingTips() {
+  const register = await getOpen();
+  if (!register) return { register: null, waiters: [] };
+  const since = register.opened_at;
+
+  // Propinas acumuladas por mesero en el periodo de la caja actual
+  const earned = await query(`
+    SELECT o.waiter_id, u.display_name AS waiter_name, COALESCE(SUM(p.tip), 0) AS earned
+    FROM payments p
+    JOIN orders o ON p.order_id = o.id
+    JOIN users u ON o.waiter_id = u.id
+    WHERE p.created_at >= $1 AND o.status = 'closed' AND p.tip > 0
+    GROUP BY o.waiter_id, u.display_name
+    HAVING COALESCE(SUM(p.tip), 0) > 0
+  `, [since]);
+
+  // Propinas ya pagadas en esta caja (cash_movements con reference tip_payment:<id>)
+  const paid = await query(`
+    SELECT
+      SPLIT_PART(reference, ':', 2)::int AS waiter_id,
+      COALESCE(SUM(amount), 0) AS paid
+    FROM cash_movements
+    WHERE register_id = $1 AND type = 'out' AND reference LIKE $2
+    GROUP BY SPLIT_PART(reference, ':', 2)
+  `, [register.id, `${TIP_PAYMENT_REF_PREFIX}%`]);
+
+  const paidByWaiter = new Map<number, number>();
+  for (const row of paid.rows) {
+    paidByWaiter.set(row.waiter_id, parseFloat(row.paid));
+  }
+
+  const waiters = earned.rows.map((row: any) => {
+    const earnedAmount = parseFloat(row.earned);
+    const paidAmount = paidByWaiter.get(row.waiter_id) || 0;
+    return {
+      waiter_id: row.waiter_id,
+      waiter_name: row.waiter_name,
+      earned: earnedAmount,
+      paid: paidAmount,
+      pending: Math.max(0, earnedAmount - paidAmount),
+    };
+  }).filter((w: any) => w.pending > 0 || w.earned > 0);
+
+  return { register, waiters };
+}
+
+export async function payTip(payerUserId: number, waiterId: number, amount: number) {
+  if (amount <= 0) throw new Error('Monto inválido');
+  const register = await getOpen();
+  if (!register) throw new Error('No hay caja abierta');
+
+  const waiterRes = await query('SELECT id, display_name FROM users WHERE id = $1', [waiterId]);
+  if (waiterRes.rows.length === 0) throw new Error('Mesero no encontrado');
+  const waiter = waiterRes.rows[0];
+
+  // Validar que no se pague más de lo pendiente
+  const { waiters } = await getPendingTips();
+  const pending = waiters.find((w: any) => w.waiter_id === waiterId)?.pending || 0;
+  if (amount > pending + 0.01) {
+    throw new Error(`Monto mayor al pendiente. Pendiente: $${pending.toFixed(2)}`);
+  }
+
+  const movement = await addMovement(register.id, payerUserId, {
+    type: 'out',
+    amount,
+    reason: `Pago de propina a ${waiter.display_name}`,
+    reference: `${TIP_PAYMENT_REF_PREFIX}${waiterId}`,
+  });
+
+  return movement;
+}
+
 export async function getHistory(limit = 30) {
   const result = await query(`
     SELECT cr.*, uo.display_name as opened_by_name, uc.display_name as closed_by_name
@@ -78,7 +159,8 @@ async function buildCashSnapshot(register: any) {
   const movements = await query(`
     SELECT
       COALESCE(SUM(CASE WHEN type='in' THEN amount ELSE 0 END), 0) as total_in,
-      COALESCE(SUM(CASE WHEN type='out' THEN amount ELSE 0 END), 0) as total_out
+      COALESCE(SUM(CASE WHEN type='out' THEN amount ELSE 0 END), 0) as total_out,
+      COALESCE(SUM(CASE WHEN type='out' AND reference LIKE 'tip_payment:%' THEN amount ELSE 0 END), 0) as tip_payments
     FROM cash_movements WHERE register_id = $1
   `, [register.id]);
 
@@ -171,6 +253,7 @@ async function buildCashSnapshot(register: any) {
   const totalTips = parseFloat(orders.rows[0]?.total_tips || '0');
   const movIn = parseFloat(movements.rows[0].total_in);
   const movOut = parseFloat(movements.rows[0].total_out);
+  const tipPayments = parseFloat(movements.rows[0].tip_payments);
   const expectedCash = openingAmount + cashSales + movIn - movOut;
   const totalAllMethods = payments.rows.reduce((sum: number, p: any) => sum + parseFloat(p.total), 0);
   const saldoFinal = openingAmount + totalAllMethods + movIn - movOut;
@@ -211,6 +294,7 @@ async function buildCashSnapshot(register: any) {
     total_tips: totalTips,
     movements_in: movIn,
     movements_out: movOut,
+    tip_payments: tipPayments,
     saldo_final: saldoFinal,
     total_all_methods: totalAllMethods,
     by_method: payments.rows,

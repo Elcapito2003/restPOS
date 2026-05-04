@@ -15,5 +15,7 @@ router.post('/corte-z', authorize('admin', 'manager'), ctrl.corteZ);
 router.post('/open', authorize('admin', 'manager', 'cashier'), validate(openRegisterSchema), ctrl.open);
 router.post('/close', authorize('admin', 'manager', 'cashier'), validate(closeRegisterSchema), ctrl.close);
 router.post('/movement', authorize('admin', 'manager', 'cashier'), validate(movementSchema), ctrl.addMovement);
+router.get('/tips/pending', authorize('admin', 'manager', 'cashier'), ctrl.getPendingTips);
+router.post('/tips/pay', authorize('admin', 'manager', 'cashier'), ctrl.payTip);
 
 export default router;

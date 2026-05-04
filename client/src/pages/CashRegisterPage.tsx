@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../config/api';
 import toast from 'react-hot-toast';
-import { DollarSign, ArrowUp, ArrowDown, Lock, X, Check, ShieldCheck, Keyboard, LogIn, Inbox } from 'lucide-react';
+import { DollarSign, ArrowUp, ArrowDown, Lock, X, Check, ShieldCheck, Keyboard, LogIn, Inbox, Banknote } from 'lucide-react';
 import { openCashDrawer } from '../lib/cashDrawer';
 import dayjs from 'dayjs';
 import { useAuth } from '../context/AuthContext';
@@ -234,6 +234,7 @@ export default function CashRegisterPage() {
   const [showAuth, setShowAuth] = useState(false);
   const [authorizedBy, setAuthorizedBy] = useState<number | null>(null);
   const [showMovementForm, setShowMovementForm] = useState(false);
+  const [showTipsModal, setShowTipsModal] = useState(false);
 
   const handleStartMovement = () => {
     if (user?.role === 'admin' || user?.role === 'manager') {
@@ -285,9 +286,12 @@ export default function CashRegisterPage() {
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
-        <button onClick={handleStartMovement} className="btn-primary flex-1 gap-2">
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={handleStartMovement} className="btn-primary flex-1 gap-2 min-w-[180px]">
           <DollarSign size={18} /> Retiro / Depósito
+        </button>
+        <button onClick={() => setShowTipsModal(true)} className="btn-primary flex-1 gap-2 min-w-[180px] bg-emerald-600 hover:bg-emerald-700">
+          <Banknote size={18} /> Pagar propinas
         </button>
         <button onClick={() => openCashDrawer()} className="btn-secondary gap-2">
           <Inbox size={18} /> Abrir cajón
@@ -335,6 +339,156 @@ export default function CashRegisterPage() {
           onClose={() => { setShowMovementForm(false); setAuthorizedBy(null); }}
         />
       )}
+
+      {/* Tips Payment Modal */}
+      {showTipsModal && <TipsPaymentModal onClose={() => setShowTipsModal(false)} />}
+    </div>
+  );
+}
+
+// ─── Tips Payment Modal ───
+function TipsPaymentModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['cash-register', 'tips-pending'],
+    queryFn: () => api.get('/cash-register/tips/pending').then(r => r.data),
+  });
+
+  const [paying, setPaying] = useState<number | null>(null);
+  const [amounts, setAmounts] = useState<Record<number, string>>({});
+
+  const payMutation = useMutation({
+    mutationFn: (params: { waiter_id: number; amount: number }) =>
+      api.post('/cash-register/tips/pay', params).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cash-register'] });
+      qc.invalidateQueries({ queryKey: ['cash-register', 'tips-pending'] });
+      toast.success('Propina pagada');
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Error'),
+  });
+
+  const handlePay = async (waiterId: number, pending: number) => {
+    const raw = amounts[waiterId] ?? pending.toFixed(2);
+    const amount = parseFloat(raw);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Monto inválido');
+      return;
+    }
+    setPaying(waiterId);
+    try {
+      await payMutation.mutateAsync({ waiter_id: waiterId, amount });
+      setAmounts(prev => { const c = { ...prev }; delete c[waiterId]; return c; });
+    } finally {
+      setPaying(null);
+    }
+  };
+
+  const handlePayAll = async () => {
+    const list = (data?.waiters || []).filter((w: any) => w.pending > 0);
+    if (list.length === 0) return;
+    if (!window.confirm(`Pagar a ${list.length} mesero${list.length !== 1 ? 's' : ''} todo lo pendiente?`)) return;
+    setPaying(-1);
+    try {
+      for (const w of list) {
+        await payMutation.mutateAsync({ waiter_id: w.waiter_id, amount: w.pending });
+      }
+    } finally {
+      setPaying(null);
+    }
+  };
+
+  const totalPending = (data?.waiters || []).reduce((s: number, w: any) => s + (w.pending || 0), 0);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg w-full max-w-2xl shadow-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-emerald-100 to-emerald-50 border-b border-emerald-300 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Banknote size={18} className="text-emerald-700" />
+            <span className="font-bold text-emerald-900">Pago de propinas a meseros</span>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-red-500"><X size={18} /></button>
+        </div>
+
+        <div className="p-4">
+          {isLoading ? (
+            <p className="text-center text-gray-500 py-8">Cargando...</p>
+          ) : (data?.waiters?.length ?? 0) === 0 ? (
+            <p className="text-center text-gray-500 py-8">No hay propinas pendientes en este turno</p>
+          ) : (
+            <>
+              <div className="text-sm text-gray-600 mb-3">
+                Las propinas se pagan en efectivo desde la caja. El monto se descuenta del saldo esperado y aparece como <b>"Propinas pagadas"</b> en el corte.
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase text-gray-500 border-b">
+                  <tr>
+                    <th className="text-left py-2">Mesero</th>
+                    <th className="text-right py-2">Acumulado</th>
+                    <th className="text-right py-2">Pagado</th>
+                    <th className="text-right py-2">Pendiente</th>
+                    <th className="text-right py-2">Pagar</th>
+                    <th className="py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {data.waiters.map((w: any) => (
+                    <tr key={w.waiter_id}>
+                      <td className="py-2 font-medium">{w.waiter_name}</td>
+                      <td className="py-2 text-right tabular-nums">${w.earned.toFixed(2)}</td>
+                      <td className="py-2 text-right tabular-nums text-gray-500">${w.paid.toFixed(2)}</td>
+                      <td className="py-2 text-right tabular-nums font-bold text-emerald-700">${w.pending.toFixed(2)}</td>
+                      <td className="py-2 text-right">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max={w.pending}
+                          value={amounts[w.waiter_id] ?? w.pending.toFixed(2)}
+                          onChange={e => setAmounts(prev => ({ ...prev, [w.waiter_id]: e.target.value }))}
+                          disabled={w.pending <= 0}
+                          className="input w-24 text-right"
+                        />
+                      </td>
+                      <td className="py-2 pl-2">
+                        <button
+                          onClick={() => handlePay(w.waiter_id, w.pending)}
+                          disabled={w.pending <= 0 || paying !== null}
+                          className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                        >
+                          {paying === w.waiter_id ? '...' : 'Pagar'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 font-bold">
+                  <tr>
+                    <td className="py-2" colSpan={3}>TOTAL PENDIENTE</td>
+                    <td className="py-2 text-right tabular-nums text-emerald-700">${totalPending.toFixed(2)}</td>
+                    <td className="py-2 text-right" colSpan={2}>
+                      {totalPending > 0 && (
+                        <button
+                          onClick={handlePayAll}
+                          disabled={paying !== null}
+                          className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                        >
+                          {paying === -1 ? 'Pagando...' : 'Pagar todo'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </>
+          )}
+        </div>
+
+        <div className="bg-gray-50 px-4 py-3 flex justify-end">
+          <button onClick={onClose} className="btn-secondary">Cerrar</button>
+        </div>
+      </div>
     </div>
   );
 }

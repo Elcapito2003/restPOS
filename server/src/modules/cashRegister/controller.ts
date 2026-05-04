@@ -58,3 +58,21 @@ export async function corteZ(req: Request, res: Response) {
     res.status(400).json({ error: err.message });
   }
 }
+
+export async function getPendingTips(_req: Request, res: Response) {
+  try {
+    res.json(await service.getPendingTips());
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
+export async function payTip(req: Request, res: Response) {
+  try {
+    const { waiter_id, amount } = req.body;
+    const movement = await service.payTip(req.user!.userId, Number(waiter_id), Number(amount));
+    res.status(201).json(movement);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+}
