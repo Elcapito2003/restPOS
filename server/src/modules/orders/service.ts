@@ -163,17 +163,39 @@ export async function sendToKitchen(orderId: number) {
   await query(`UPDATE orders SET status = 'sent', updated_at = NOW() WHERE id = $1`, [orderId]);
 
   const order = await getById(orderId);
+
+  // Items con modifiers para enviar al cliente Electron que tiene las impresoras locales
+  const itemsRes = await query(`
+    SELECT oi.id, oi.product_id, oi.product_name, oi.quantity, oi.unit_price, oi.notes,
+           oi.printer_target, oi.status,
+           json_agg(json_build_object('name', oim.modifier_name, 'price', oim.price_extra))
+             FILTER (WHERE oim.id IS NOT NULL) AS modifiers
+    FROM order_items oi
+    LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
+    WHERE oi.order_id = $1 AND oi.status = 'sent'
+    GROUP BY oi.id
+  `, [orderId]);
+
+  // Settings de impresoras (las IPs son locales del restaurante; el server no las usa, se las pasa al Electron)
+  const settingsRes = await query(`SELECT key, value FROM settings WHERE key IN ('printer_kitchen_ip','printer_bar_ip','printer_cashier_ip')`);
+  const printerSettings: any = { kitchen: '', bar: '', cashier: '' };
+  for (const row of settingsRes.rows) {
+    if (row.key === 'printer_kitchen_ip') printerSettings.kitchen = row.value;
+    if (row.key === 'printer_bar_ip') printerSettings.bar = row.value;
+    if (row.key === 'printer_cashier_ip') printerSettings.cashier = row.value;
+  }
+
   try {
     getIO().to('kitchen').emit('order:sent', order);
     getIO().emit('order:updated', order);
+    // Solicitar impresión local — el cliente Electron del restaurante escucha y dispara print local.
+    // El server cloud NO puede imprimir directamente porque las impresoras están detrás de NAT.
+    getIO().emit('print:comanda', {
+      order,
+      items: itemsRes.rows,
+      printerSettings,
+    });
   } catch {}
-
-  // Auto-print comanda to kitchen/bar printers
-  try {
-    await printComanda(orderId);
-  } catch (err) {
-    console.error('[AUTO-PRINT] Error imprimiendo comanda:', err);
-  }
 
   return order;
 }

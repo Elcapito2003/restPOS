@@ -6,6 +6,7 @@ import { LogOut, ChevronDown } from 'lucide-react';
 import OfflineIndicator from '../components/OfflineIndicator';
 import { useConnectivity } from '../context/ConnectivityContext';
 import ShiftGate from '../components/ShiftGate';
+import { usePrintListener } from '../hooks/usePrintListener';
 
 interface SubItem {
   label: string;
@@ -25,6 +26,8 @@ export default function MainLayout() {
   const { user, logout } = useAuth();
   const { isOnline } = useConnectivity();
   const navigate = useNavigate();
+  // Activa el puente que escucha 'print:comanda'/'print:receipt' del server y los delega al Electron local
+  usePrintListener();
   const location = useLocation();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
