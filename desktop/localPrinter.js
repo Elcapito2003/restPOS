@@ -26,8 +26,36 @@ function createPrinter(iface) {
   return new ThermalPrinter({
     type: PrinterTypes.EPSON,
     interface: iface,
-    options: { timeout: 5000 },
+    options: { timeout: 10000 },
   });
+}
+
+/**
+ * Ejecuta un print con retry exponential backoff.
+ * Las impresoras IP (EPSON térmicas) entran en modo sleep tras inactividad.
+ * El primer paquete TCP falla con timeout porque tarda en despertar; el
+ * segundo intento usualmente funciona.
+ */
+async function executeWithRetry(printer, target, maxAttempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await printer.execute();
+      if (attempt > 1) console.log(`[LOCAL-PRINTER:${target}] OK en intento ${attempt}/${maxAttempts}`);
+      return;
+    } catch (err) {
+      lastError = err;
+      const isTimeout = /timeout|ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH/i.test(err && err.message || '');
+      console.warn(`[LOCAL-PRINTER:${target}] intento ${attempt}/${maxAttempts} falló: ${err && err.message}`);
+      if (attempt < maxAttempts && isTimeout) {
+        const wait = 400 * Math.pow(3, attempt - 1);
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
 }
 
 function setupPrintHandlers() {
@@ -82,7 +110,7 @@ function setupPrintHandlers() {
           }
           printer.drawLine();
           printer.cut();
-          await printer.execute();
+          await executeWithRetry(printer, 'kitchen');
           results.push({ target: 'kitchen', status: 'printed' });
         } catch (err) {
           results.push({ target: 'kitchen', status: 'failed', error: err.message });
@@ -119,7 +147,7 @@ function setupPrintHandlers() {
           }
           printer.drawLine();
           printer.cut();
-          await printer.execute();
+          await executeWithRetry(printer, 'bar');
           results.push({ target: 'bar', status: 'printed' });
         } catch (err) {
           results.push({ target: 'bar', status: 'failed', error: err.message });
@@ -210,7 +238,7 @@ function setupPrintHandlers() {
       printer.alignCenter();
       printer.println('Gracias por su visita!');
       printer.cut();
-      await printer.execute();
+      await executeWithRetry(printer, 'cashier');
       return { status: 'printed' };
     } catch (err) {
       return { status: 'failed', error: err.message };
@@ -229,7 +257,7 @@ function setupPrintHandlers() {
       printer.println(`Destino: ${target}`);
       printer.println(new Date().toLocaleString('es-MX'));
       printer.cut();
-      await printer.execute();
+      await executeWithRetry(printer, target);
       return { status: 'ok' };
     } catch (err) {
       return { status: 'error', message: err.message };
