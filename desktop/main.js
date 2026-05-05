@@ -111,7 +111,15 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      devTools: true,
     },
+  });
+
+  // Atajo F12 para abrir/cerrar DevTools (necesario para soporte y debug)
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) {
+      mainWindow.webContents.toggleDevTools();
+    }
   });
 
   const menu = Menu.buildFromTemplate([
@@ -119,6 +127,7 @@ function createWindow() {
       label: 'RestPOS',
       submenu: [
         { label: 'Recargar', accelerator: 'F5', click: () => mainWindow.webContents.reload() },
+        { label: 'DevTools', accelerator: 'F12', click: () => mainWindow.webContents.toggleDevTools() },
         { label: 'Pantalla Completa', accelerator: 'F11', click: () => mainWindow.setFullScreen(!mainWindow.isFullScreen()) },
         { type: 'separator' },
         { label: 'Abrir en Navegador', click: () => shell.openExternal(SERVER_URL) },
