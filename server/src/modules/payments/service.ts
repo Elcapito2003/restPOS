@@ -34,8 +34,19 @@ export async function processPayment(cashierId: number, data: {
 
     if (totalPaid >= orderTotal) {
       await client.query(`UPDATE orders SET status = 'closed', closed_at = NOW(), updated_at = NOW() WHERE id = $1`, [data.order_id]);
+      // Liberar mesa SOLO si no quedan otras órdenes activas. Si las hay
+      // (split bills, varias órdenes en la misma mesa), reapuntar
+      // current_order_id a la más reciente y mantenerla ocupada.
       if (order.table_id) {
-        await client.query(`UPDATE tables SET status = 'free', current_order_id = NULL WHERE id = $1`, [order.table_id]);
+        const remaining = await client.query(
+          `SELECT id FROM orders WHERE table_id = $1 AND status IN ('open','sent','partial') AND id <> $2 ORDER BY created_at DESC LIMIT 1`,
+          [order.table_id, data.order_id]
+        );
+        if (remaining.rows.length === 0) {
+          await client.query(`UPDATE tables SET status = 'free', current_order_id = NULL WHERE id = $1`, [order.table_id]);
+        } else {
+          await client.query(`UPDATE tables SET status = 'occupied', current_order_id = $1 WHERE id = $2`, [remaining.rows[0].id, order.table_id]);
+        }
         const table = (await client.query('SELECT * FROM tables WHERE id = $1', [order.table_id])).rows[0];
         try { getIO().to(`floor:${table.floor_id}`).emit('table:status_changed', table); } catch {}
       }

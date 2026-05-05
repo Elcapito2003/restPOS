@@ -50,6 +50,28 @@ export async function getActive() {
   return result.rows;
 }
 
+/**
+ * Libera una mesa (status='free', current_order_id=NULL) ÚNICAMENTE si no quedan
+ * otras órdenes activas en la misma. Si quedan, apunta current_order_id a la
+ * más reciente y mantiene status='occupied'. Esto previene que cancelar/cobrar
+ * una orden libere la mesa cuando hay otra orden con productos sin atender.
+ */
+async function freeTableIfNoActiveOrders(tableId: number, excludeOrderId?: number) {
+  const remaining = await query(
+    `SELECT id FROM orders WHERE table_id = $1 AND status IN ('open','sent','partial') AND id <> COALESCE($2, -1) ORDER BY created_at DESC LIMIT 1`,
+    [tableId, excludeOrderId || null]
+  );
+  if (remaining.rows.length === 0) {
+    await query(`UPDATE tables SET status = 'free', current_order_id = NULL WHERE id = $1`, [tableId]);
+  } else {
+    await query(`UPDATE tables SET status = 'occupied', current_order_id = $1 WHERE id = $2`, [remaining.rows[0].id, tableId]);
+  }
+  try {
+    const table = (await query('SELECT * FROM tables WHERE id = $1', [tableId])).rows[0];
+    if (table) getIO().to(`floor:${table.floor_id}`).emit('table:status_changed', table);
+  } catch {}
+}
+
 export async function create(waiterId: number, data: { table_id?: number | null; order_type?: string; guest_count?: number; notes?: string }) {
   const dailyNumber = await getNextDailyNumber();
   const orderType = data.order_type || (data.table_id ? 'dine_in' : 'quick');
@@ -244,11 +266,7 @@ export async function cancelOrder(orderId: number) {
   await query(`UPDATE order_items SET status = 'cancelled' WHERE order_id = $1`, [orderId]);
 
   if (order.table_id) {
-    await query(`UPDATE tables SET status = 'free', current_order_id = NULL WHERE id = $1`, [order.table_id]);
-    try {
-      const table = (await query('SELECT * FROM tables WHERE id = $1', [order.table_id])).rows[0];
-      getIO().to(`floor:${table.floor_id}`).emit('table:status_changed', table);
-    } catch {}
+    await freeTableIfNoActiveOrders(order.table_id, orderId);
   }
 
   try { getIO().emit('order:cancelled', { id: orderId }); } catch {}
@@ -373,7 +391,7 @@ export async function mergeOrders(sourceOrderId: number, targetOrderId: number) 
 
   const sourceOrder = await query('SELECT table_id FROM orders WHERE id = $1', [sourceOrderId]);
   if (sourceOrder.rows[0]?.table_id) {
-    await query(`UPDATE tables SET status = 'free', current_order_id = NULL WHERE id = $1`, [sourceOrder.rows[0].table_id]);
+    await freeTableIfNoActiveOrders(sourceOrder.rows[0].table_id, sourceOrderId);
   }
 
   const client = await getClient();
@@ -399,9 +417,9 @@ export async function changeTable(orderId: number, newTableId: number) {
   const order = await getById(orderId);
   if (!order) throw new Error('Orden no encontrada');
 
-  // Free old table
+  // Free old table only if no other active orders remain on it
   if (order.table_id) {
-    await query(`UPDATE tables SET status = 'free', current_order_id = NULL WHERE id = $1`, [order.table_id]);
+    await freeTableIfNoActiveOrders(order.table_id, orderId);
   }
   // Occupy new table
   await query(`UPDATE tables SET status = 'occupied', current_order_id = $1 WHERE id = $2`, [orderId, newTableId]);
