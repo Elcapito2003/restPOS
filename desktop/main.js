@@ -5,7 +5,7 @@ const http = require('http');
 const { setupPrintHandlers } = require('./localPrinter');
 
 // Cloud backend URL
-const SERVER_URL = 'http://165.227.121.235';
+const SERVER_URL = 'https://restpos.ai';
 
 let mainWindow;
 let isOnline = true;

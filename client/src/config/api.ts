@@ -5,7 +5,7 @@ import axios from 'axios';
 const isElectron = !!(window as any).restpos?.isElectron;
 const isFileProtocol = window.location.protocol === 'file:';
 const serverUrl = isElectron || isFileProtocol
-  ? ((window as any).restpos?.getServerUrl?.() || 'http://165.227.121.235')
+  ? ((window as any).restpos?.getServerUrl?.() || 'https://restpos.ai')
   : '';
 
 const api = axios.create({
