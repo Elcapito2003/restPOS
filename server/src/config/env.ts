@@ -24,4 +24,7 @@ export const env = {
   mlClientId: process.env.ML_CLIENT_ID || '5394522073489421',
   mlClientSecret: process.env.ML_CLIENT_SECRET || 'unRiv0lS950eTawpkBIbDt5S3d2rsRR4',
   mlRedirectUri: process.env.ML_REDIRECT_URI || `http://165.227.121.235/ml-callback`,
+  // Tenant default para clientes legacy (desktop tradicional sin X-Tenant-Id).
+  // Sin esto, los JWT no incluyen tenantId y el socket queda sin tenant.
+  defaultTenantId: process.env.DEFAULT_TENANT_ID || 'e60c023f-de03-43a0-b0d5-4665913c02a8',
 };

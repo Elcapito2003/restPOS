@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { getTenantPool, getLegacyPool } from '../multi-tenant/tenantPoolManager';
 import { runWithTenantDb } from '../config/database';
+import { env } from '../config/env';
 import type { TenantDb } from '../multi-tenant/types';
 
 // Extend Express Request to include tenant context
@@ -36,9 +37,13 @@ export function resolveTenant(req: Request, res: Response, next: NextFunction) {
         res.status(403).json({ error: 'Tenant not available' });
       });
   } else {
-    // Backward compatibility: use legacy pool via AsyncLocalStorage
+    // Backward compatibility: clientes legacy (desktop tradicional sin X-Tenant-Id)
+    // se mapean al tenant default. Esto garantiza que req.tenantId siempre tenga
+    // valor — sin esto, el JWT generado en /auth/pin-login queda sin tenantId,
+    // el socket no resuelve tenant, y register:print-host se ignora.
     const legacyDb = getLegacyPool();
     req.tenantDb = legacyDb;
+    req.tenantId = env.defaultTenantId;
     runWithTenantDb(legacyDb, () => next());
   }
 }
