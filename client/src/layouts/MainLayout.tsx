@@ -160,6 +160,7 @@ export default function MainLayout() {
       roles: ['admin', 'manager'],
       items: [
         { label: 'Asistencia / Reloj checador', to: '/asistencia', offlineDisabled: true },
+        { label: 'Enrolar huellas', to: '/huellas', offlineDisabled: true },
       ],
     },
     {

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../config/api';
-import { Clock, Download, Filter, Lock, ArrowDown, ArrowUp } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Clock, Download, Lock, ArrowDown, ArrowUp, Monitor, Power, X as XIcon } from 'lucide-react';
 
 type PunchRow = {
   id: number;
@@ -36,8 +37,37 @@ function weekAgoDate() {
 export default function AsistenciaPage() {
   const [from, setFrom] = useState(weekAgoDate());
   const [to, setTo] = useState(todayDate());
-  const [userFilter, setUserFilter] = useState<number | ''>('');
+  const [userFilter, _setUserFilter] = useState<number | ''>('');
   const [tab, setTab] = useState<'log' | 'resumen'>('resumen');
+  const [relojOpen, setRelojOpen] = useState(false);
+  const [autoOpen, setAutoOpen] = useState(false);
+
+  const electronReloj = (window as any).reloj;
+
+  useEffect(() => {
+    if (!electronReloj) return;
+    electronReloj.isOpen().then((r: any) => setRelojOpen(!!r.open));
+    electronReloj.getAutoOpen().then((r: any) => setAutoOpen(!!r.enabled));
+    const t = setInterval(() => electronReloj.isOpen().then((r: any) => setRelojOpen(!!r.open)), 3000);
+    return () => clearInterval(t);
+  }, [electronReloj]);
+
+  async function toggleReloj() {
+    if (!electronReloj) return toast.error('Solo en app de escritorio');
+    if (relojOpen) await electronReloj.close();
+    else await electronReloj.open();
+    const r = await electronReloj.isOpen();
+    setRelojOpen(!!r.open);
+  }
+  async function toggleAutoOpen() {
+    if (!electronReloj) return;
+    const next = !autoOpen;
+    await electronReloj.setAutoOpen(next);
+    setAutoOpen(next);
+    if (next && !relojOpen) setRelojOpen(true);
+    if (!next && relojOpen) setRelojOpen(false);
+    toast.success(next ? 'Reloj checador se abrirá automáticamente al iniciar RestPOS' : 'Auto-abrir desactivado');
+  }
 
   const fromIso = `${from}T00:00:00`;
   const toIso = `${to}T23:59:59`;
@@ -84,6 +114,34 @@ export default function AsistenciaPage() {
         <Lock size={14} className="text-amber-600" />
         Registros append-only — no se pueden editar ni eliminar.
       </p>
+
+      {/* Control de la ventana del reloj checador */}
+      {electronReloj && (
+        <div className="bg-white rounded-xl shadow border p-4 mb-4">
+          <div className="flex items-center gap-3 mb-3">
+            <Monitor className="text-blue-600" size={20} />
+            <h3 className="font-semibold">Ventana del reloj checador</h3>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${relojOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              {relojOpen ? 'Abierta' : 'Cerrada'}
+            </span>
+          </div>
+          <p className="text-sm text-gray-600 mb-3">
+            Es una ventana aparte que se queda escuchando huellas. Eve puede usar la ventana principal de RestPOS normalmente para tomar pedidos. Cuando los empleados llegan o se van, ponen su dedo en el lector y la ventana del reloj registra entrada/salida.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={toggleReloj}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 ${relojOpen ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+            >
+              {relojOpen ? <><XIcon size={16}/> Cerrar ventana</> : <><Power size={16}/> Abrir ventana</>}
+            </button>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={autoOpen} onChange={toggleAutoOpen} className="w-4 h-4" />
+              Abrir automáticamente al iniciar RestPOS
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-white rounded-xl shadow border p-4 mb-4 flex flex-wrap items-end gap-3">

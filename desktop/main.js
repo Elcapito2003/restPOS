@@ -9,6 +9,7 @@ const { setupHandlers: setupFingerprintHandlers, closeAll: closeFingerprint } = 
 const SERVER_URL = 'https://restpos.ai';
 
 let mainWindow;
+let relojWindow;
 let isOnline = true;
 
 // ─── Auto-updater ───
@@ -207,11 +208,87 @@ function createWindow() {
   }, 5000);
 }
 
+// ─── Ventana del reloj checador ───
+// Ventana secundaria que carga /reloj y se queda escuchando huellas mientras
+// la ventana principal sigue siendo usada normalmente por la gerenta/cajero.
+// Se abre por defecto al iniciar la app (preferencia persistida en localStorage
+// del renderer y también en electron-settings simple via archivo en userData).
+
+const settingsFile = require('path').join(app.getPath('userData'), 'restpos-settings.json');
+function loadSettings() {
+  try { return JSON.parse(require('fs').readFileSync(settingsFile, 'utf-8')); } catch { return {}; }
+}
+function saveSettings(s) {
+  try { require('fs').writeFileSync(settingsFile, JSON.stringify(s)); } catch {}
+}
+
+function createRelojWindow() {
+  if (relojWindow && !relojWindow.isDestroyed()) {
+    relojWindow.show();
+    relojWindow.focus();
+    return relojWindow;
+  }
+
+  // Posicionar la ventana del reloj en la esquina superior derecha de la pantalla
+  // primaria. Si hay 2 monitores, abrir en el secundario.
+  const { screen } = require('electron');
+  const displays = screen.getAllDisplays();
+  const target = displays.length > 1 ? displays[1] : displays[0];
+  const w = 480, h = 720;
+  const x = target.bounds.x + target.bounds.width - w - 20;
+  const y = target.bounds.y + 60;
+
+  relojWindow = new BrowserWindow({
+    width: w,
+    height: h,
+    x, y,
+    title: 'RestPOS — Reloj checador',
+    icon: path.join(__dirname, 'icon.png'),
+    autoHideMenuBar: true,
+    minimizable: true,
+    maximizable: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+      devTools: true,
+    },
+  });
+
+  const localClient = getClientPath();
+  if (localClient) {
+    relojWindow.loadFile(localClient, { hash: '/reloj?kiosk=1' });
+  } else {
+    relojWindow.loadURL(`${SERVER_URL}/#/reloj?kiosk=1`);
+  }
+
+  relojWindow.on('closed', () => { relojWindow = null; });
+  return relojWindow;
+}
+
+ipcMain.handle('reloj:open', () => { createRelojWindow(); return { ok: true }; });
+ipcMain.handle('reloj:close', () => { if (relojWindow) relojWindow.close(); return { ok: true }; });
+ipcMain.handle('reloj:is-open', () => ({ open: !!(relojWindow && !relojWindow.isDestroyed()) }));
+ipcMain.handle('reloj:get-auto-open', () => ({ enabled: !!loadSettings().relojAutoOpen }));
+ipcMain.handle('reloj:set-auto-open', (_e, enabled) => {
+  saveSettings({ ...loadSettings(), relojAutoOpen: !!enabled });
+  if (enabled) createRelojWindow();
+  else if (relojWindow) relojWindow.close();
+  return { ok: true };
+});
+
 // Setup local print handlers
 setupPrintHandlers();
 setupFingerprintHandlers();
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  // Si el admin habilitó auto-abrir el reloj checador, lanzarlo después de
+  // 2 seg para dejar que la ventana principal cargue primero.
+  if (loadSettings().relojAutoOpen) {
+    setTimeout(() => createRelojWindow(), 2000);
+  }
+});
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => { try { closeFingerprint(); } catch {} });
 app.on('activate', () => { if (!mainWindow) createWindow(); });

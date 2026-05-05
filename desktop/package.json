@@ -1,6 +1,6 @@
 {
   "name": "restpos",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "RestPOS - Sistema Punto de Venta para Restaurantes",
   "main": "main.js",
   "author": "RestPOS",

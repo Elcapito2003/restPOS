@@ -3,7 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { Fingerprint, Clock, LogOut, AlertTriangle } from 'lucide-react';
+import { Fingerprint, Clock, LogOut, AlertTriangle, Loader2 } from 'lucide-react';
+
+// La ventana secundaria del reloj se carga con `?kiosk=1` en el hash. La
+// ventana principal puede entrar a /reloj manualmente (para testear), pero
+// no es kiosko. En modo kiosko, "salir" cierra la ventana en vez de navegar.
+function detectKioskMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hash = window.location.hash || '';
+  return hash.includes('kiosk=1') || hash.includes('kiosk=true');
+}
 
 type RosterEntry = {
   id: number;
@@ -30,14 +39,28 @@ export default function RelojChecadorPage() {
   const [error, setError] = useState<string | null>(null);
   const [exitPin, setExitPin] = useState('');
   const [showExit, setShowExit] = useState(false);
+  const [hasToken, setHasToken] = useState<boolean>(!!localStorage.getItem('token'));
   const stopRef = useRef(false);
 
   const isElectron = !!window.fingerprint;
+  const isKiosk = detectKioskMode();
+
+  // En modo kiosko, esperar a que el operador inicie sesión en la otra ventana.
+  // Polling cada 2s del token en localStorage.
+  useEffect(() => {
+    if (hasToken) return;
+    const t = setInterval(() => {
+      const tk = localStorage.getItem('token');
+      if (tk) { setHasToken(true); clearInterval(t); }
+    }, 2000);
+    return () => clearInterval(t);
+  }, [hasToken]);
 
   const { data: roster } = useQuery<RosterEntry[]>({
     queryKey: ['attendance-roster'],
     queryFn: () => api.get('/attendance/roster').then(r => r.data),
     refetchInterval: 30000,
+    enabled: hasToken,
   });
 
   // Reloj
@@ -105,15 +128,21 @@ export default function RelojChecadorPage() {
 
   function handleExit(e: React.FormEvent) {
     e.preventDefault();
-    if (!user) { navigate('/login'); return; }
-    if (user.role !== 'admin') {
-      setError('Sólo el admin puede salir del reloj checador');
+    if (!user) {
+      // Sin login todavía. En modo kiosko cerramos la ventana, en modo navegación normal mandamos a /login.
+      if (isKiosk && (window as any).reloj) (window as any).reloj.close();
+      else navigate('/login');
+      return;
+    }
+    if (user.role !== 'admin' && user.role !== 'manager') {
+      setError('Sólo admin o gerente pueden cerrar el reloj checador');
       return;
     }
     api.post('/auth/verify-pin', { userId: user.id, pin: exitPin })
       .then(() => {
         stopRef.current = true;
-        navigate('/home');
+        if (isKiosk && (window as any).reloj) (window as any).reloj.close();
+        else navigate('/home');
       })
       .catch(() => setError('PIN incorrecto'));
   }
@@ -145,6 +174,12 @@ export default function RelojChecadorPage() {
             <AlertTriangle className="mx-auto text-amber-400 mb-4" size={64} />
             <h2 className="text-3xl font-bold mb-2">Solo en app de escritorio</h2>
             <p className="text-blue-200">El reloj checador requiere el lector ZK9500 conectado a la app de escritorio.</p>
+          </div>
+        ) : !hasToken ? (
+          <div className="text-center max-w-md">
+            <Loader2 className="mx-auto text-blue-400 mb-4 animate-spin" size={64} />
+            <h2 className="text-3xl font-bold mb-2">Esperando inicio de sesión</h2>
+            <p className="text-blue-200">Eve o el cajero debe iniciar sesión en la ventana principal de RestPOS para que el reloj checador funcione.</p>
           </div>
         ) : !roster || roster.length === 0 ? (
           <div className="text-center max-w-md">

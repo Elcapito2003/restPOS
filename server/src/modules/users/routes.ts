@@ -10,11 +10,12 @@ const router = Router();
 router.use(authenticate);
 router.get('/', ctrl.getAll);
 router.get('/enrollment-status', authorize('admin', 'manager'), ctrl.enrollmentStatus);
+// Enrolar/eliminar huella: admin o manager (gerente).
 router.get('/:id', ctrl.getById);
 router.post('/', authorize('admin'), validate(createUserSchema), ctrl.create);
 router.put('/:id', authorize('admin'), validate(updateUserSchema), ctrl.update);
 router.delete('/:id', authorize('admin'), ctrl.remove);
-router.put('/:id/fingerprint', authorize('admin'), ctrl.setFingerprint);
-router.delete('/:id/fingerprint', authorize('admin'), ctrl.clearFingerprint);
+router.put('/:id/fingerprint', authorize('admin', 'manager'), ctrl.setFingerprint);
+router.delete('/:id/fingerprint', authorize('admin', 'manager'), ctrl.clearFingerprint);
 
 export default router;

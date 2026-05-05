@@ -24,6 +24,13 @@ declare global {
       identify: (templates: any[], captured: string) => Promise<any>;
       close: () => Promise<{ ok: boolean }>;
     };
+    reloj?: {
+      open: () => Promise<{ ok: boolean }>;
+      close: () => Promise<{ ok: boolean }>;
+      isOpen: () => Promise<{ open: boolean }>;
+      getAutoOpen: () => Promise<{ enabled: boolean }>;
+      setAutoOpen: (enabled: boolean) => Promise<{ ok: boolean }>;
+    };
   }
 }
 

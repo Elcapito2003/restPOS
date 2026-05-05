@@ -150,7 +150,7 @@ export default function App() {
                 {/* Seguridad */}
                 <Route path="/users" element={<R roles={['admin']}><UsersPage /></R>} />
                 <Route path="/security" element={<R roles={['admin']}><SecurityPage /></R>} />
-                <Route path="/huellas" element={<R roles={['admin']}><HuellasPage /></R>} />
+                <Route path="/huellas" element={<R roles={['admin','manager']}><HuellasPage /></R>} />
                 <Route path="/asistencia" element={<R roles={['admin','manager']}><AsistenciaPage /></R>} />
 
                 {/* Configuración */}

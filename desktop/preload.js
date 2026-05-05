@@ -32,3 +32,12 @@ contextBridge.exposeInMainWorld('fingerprint', {
   identify: (templates, captured) => ipcRenderer.invoke('fingerprint:identify', { templates, captured }),
   close: () => ipcRenderer.invoke('fingerprint:close'),
 });
+
+// Ventana del reloj checador (controlable desde la app)
+contextBridge.exposeInMainWorld('reloj', {
+  open: () => ipcRenderer.invoke('reloj:open'),
+  close: () => ipcRenderer.invoke('reloj:close'),
+  isOpen: () => ipcRenderer.invoke('reloj:is-open'),
+  getAutoOpen: () => ipcRenderer.invoke('reloj:get-auto-open'),
+  setAutoOpen: (enabled) => ipcRenderer.invoke('reloj:set-auto-open', enabled),
+});
