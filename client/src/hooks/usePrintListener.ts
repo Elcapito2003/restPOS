@@ -14,13 +14,25 @@ export function usePrintListener() {
   const socket = useSocket();
 
   useEffect(() => {
+    console.log('[usePrintListener] mounted. socket:', !!socket, 'electronPrint:', !!(window as any).electronPrint?.isElectron);
     if (!socket) return;
     const electronPrint = (window as any).electronPrint;
-    if (!electronPrint?.isElectron) return; // solo en Electron
+    if (!electronPrint?.isElectron) {
+      console.log('[usePrintListener] NO es Electron, listener inactivo');
+      return;
+    }
 
     // Registrar al server que esta instancia puede imprimir local
-    const registerSelf = () => socket.emit('register:print-host');
-    if (socket.connected) registerSelf();
+    const registerSelf = () => {
+      console.log('[usePrintListener] emitiendo register:print-host (socket.connected=' + socket.connected + ')');
+      socket.emit('register:print-host');
+    };
+    if (socket.connected) {
+      console.log('[usePrintListener] socket ya conectado, registro inmediato');
+      registerSelf();
+    } else {
+      console.log('[usePrintListener] socket NO conectado aún, esperando connect event');
+    }
     socket.on('connect', registerSelf);
 
     const onComanda = async (payload: any) => {
