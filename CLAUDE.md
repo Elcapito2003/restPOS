@@ -49,3 +49,17 @@ npx tsx src/db/setupMaster.ts
 ### Env vars extra
 - `MASTER_DATABASE_URL` — default `postgresql://restpos:restpos2026secure@localhost:5432/restpos_master`
 - `SUPER_ADMIN_JWT_SECRET` — separate from app JWT
+
+## Pendientes
+
+### MercadoLibre — buscador automatizado roto
+El módulo `server/src/modules/mercadolibre/browser.ts` usa Playwright para abrir Chrome y automatizar búsqueda/compra/carrito. **No funciona en producción** porque el server corre en el VPS (Linux headless, NYC) y la ventana de Chrome se abre allá donde el user no la ve. Solo funcionaba cuando todo corría local en una sola PC.
+
+Opciones:
+- **A (rápida):** quitar el buscador automatizado, usar solo la API oficial (search, ver órdenes), y para comprar abrir el link de ML en el navegador del user — botón manual "ya compré" que queda registrado en `ml_purchases`.
+- **B (1-2 días):** mover Playwright/Puppeteer al main de Electron (corre en la PC del POS), exponer IPC, cambiar `MercadoLibrePage.tsx` para llamar IPC en vez de REST. Solo así la ventana se abre donde el user puede verla.
+
+OAuth (login + token refresh) sí funciona — eso vive en `service.ts` y usa la API REST oficial de ML.
+
+### Reloj checador (huella ZK9500) — Setup en cada PC
+El feature de reloj checador con huella digital (v2.4.0) requiere que **el setup.exe del SDK ZKFinger Standard 5.3** corra una vez en cada PC donde se vaya a usar el lector. Eso instala el driver del USB + `libzkfp.dll` en `C:\Windows\System32\`. El instalador de RestPOS NO lo incluye porque ZK no permite redistribución del SDK. Documentar este paso en algún manual de instalación cuando hagamos onboarding de nuevos restaurantes.
