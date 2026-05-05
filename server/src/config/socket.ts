@@ -68,20 +68,29 @@ export function initSocket(server: HttpServer): Server {
   // Optional JWT auth: if provided, the socket joins tenant + user rooms.
   // Unauthenticated sockets still work (backward-compat with legacy clients).
   io.use((socket: Socket, next) => {
+    const authObj = socket.handshake.auth as any;
+    const headerAuth = socket.handshake.headers.authorization;
+    const queryToken = (socket.handshake.query as any)?.token;
+    console.log(`[socket-handshake] id=${socket.id} authKeys=${Object.keys(authObj || {}).join(',')} hasAuthToken=${!!authObj?.token} hasHeader=${!!headerAuth} hasQuery=${!!queryToken}`);
+
     const token =
-      (socket.handshake.auth as any)?.token ||
-      (typeof socket.handshake.headers.authorization === 'string'
-        ? socket.handshake.headers.authorization.replace(/^Bearer\s+/i, '')
-        : undefined);
-    if (!token) return next();
+      authObj?.token ||
+      (typeof headerAuth === 'string' ? headerAuth.replace(/^Bearer\s+/i, '') : undefined) ||
+      queryToken;
+
+    if (!token) {
+      console.log(`[socket-handshake] id=${socket.id} sin token — conexión anónima`);
+      return next();
+    }
     try {
       const payload = jwt.verify(token, env.jwtSecret) as JwtPayload;
       (socket.data as any).userId = payload.userId;
       (socket.data as any).tenantId = payload.tenantId;
+      console.log(`[socket-handshake] id=${socket.id} OK userId=${payload.userId} tenantId=${payload.tenantId}`);
       if (payload.userId) socket.join(`user:${payload.userId}`);
       if (payload.tenantId) socket.join(`tenant:${payload.tenantId}`);
-    } catch {
-      // invalid token → still allow unauth connection
+    } catch (err: any) {
+      console.warn(`[socket-handshake] id=${socket.id} token inválido: ${err.message}`);
     }
     next();
   });
