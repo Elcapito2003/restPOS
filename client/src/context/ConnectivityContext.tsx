@@ -23,9 +23,11 @@ export function ConnectivityProvider({ children }: { children: React.ReactNode }
   const checkHealth = useCallback(async () => {
     try {
       const baseUrl = (window as any).restpos?.getServerUrl?.() || '';
-      const healthUrl = baseUrl.startsWith('file') || !baseUrl
-        ? 'http://165.227.121.235/api/health'
-        : `${baseUrl}/api/health`;
+      // En navegador (sin restpos.getServerUrl) usamos URL relativa para evitar mixed-content.
+      // En Electron usamos la URL completa que provee el preload.
+      const healthUrl = baseUrl
+        ? `${baseUrl}/api/health`
+        : '/api/health';
       const res = await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) throw new Error('not ok');
       if (!isOnline) {
