@@ -101,7 +101,11 @@ export function initSocket(server: HttpServer): Server {
     // El server sólo manda print:comanda al primary (primero registrado por tenant).
     socket.on('register:print-host', () => {
       const tid = (socket.data as any).tenantId as string | undefined;
-      if (tid) registerPrintHost(socket.id, tid);
+      if (tid) {
+        registerPrintHost(socket.id, tid);
+      } else {
+        console.warn(`[print-host] register:print-host IGNORADO socket=${socket.id} — sin tenantId (handshake sin JWT)`);
+      }
     });
 
     socket.on('disconnect', () => {
