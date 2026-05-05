@@ -35,3 +35,25 @@ export async function remove(req: Request, res: Response) {
   await service.remove(+req.params.id);
   res.json({ ok: true });
 }
+
+export async function enrollmentStatus(_req: Request, res: Response) {
+  res.json(await service.getEnrollmentStatus());
+}
+
+export async function setFingerprint(req: Request, res: Response) {
+  try {
+    const template = req.body?.template;
+    if (!template || typeof template !== 'string') {
+      return res.status(400).json({ error: 'template (base64) requerido' });
+    }
+    const u = await service.setFingerprint(+req.params.id, template);
+    res.json(u);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function clearFingerprint(req: Request, res: Response) {
+  const u = await service.clearFingerprint(+req.params.id);
+  res.json(u);
+}

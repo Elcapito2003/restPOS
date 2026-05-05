@@ -3,6 +3,7 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
 const { setupPrintHandlers } = require('./localPrinter');
+const { setupHandlers: setupFingerprintHandlers, closeAll: closeFingerprint } = require('./fingerprint');
 
 // Cloud backend URL
 const SERVER_URL = 'https://restpos.ai';
@@ -208,7 +209,9 @@ function createWindow() {
 
 // Setup local print handlers
 setupPrintHandlers();
+setupFingerprintHandlers();
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => { try { closeFingerprint(); } catch {} });
 app.on('activate', () => { if (!mainWindow) createWindow(); });

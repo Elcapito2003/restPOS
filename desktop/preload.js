@@ -22,3 +22,13 @@ contextBridge.exposeInMainWorld('electronPrint', {
   identifyPrinter: (data) => ipcRenderer.invoke('printer:identify', data),
   isElectron: true,
 });
+
+// Lector de huella ZKTeco ZK9500 (libzkfp.dll, instalado por el setup del SDK)
+contextBridge.exposeInMainWorld('fingerprint', {
+  available: () => ipcRenderer.invoke('fingerprint:available'),
+  deviceInfo: () => ipcRenderer.invoke('fingerprint:device-info'),
+  capture: (timeoutMs) => ipcRenderer.invoke('fingerprint:capture', timeoutMs),
+  merge: (t1, t2, t3) => ipcRenderer.invoke('fingerprint:merge', t1, t2, t3),
+  identify: (templates, captured) => ipcRenderer.invoke('fingerprint:identify', { templates, captured }),
+  close: () => ipcRenderer.invoke('fingerprint:close'),
+});

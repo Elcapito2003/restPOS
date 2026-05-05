@@ -52,3 +52,29 @@ export async function remove(id: number) {
   await query('UPDATE users SET is_active = false WHERE id = $1', [id]);
   emitToUser(id, 'user:deactivated', { userId: id, reason: 'removed' });
 }
+
+export async function setFingerprint(id: number, templateBase64: string) {
+  await query(
+    `UPDATE users SET fingerprint_template = $1, fingerprint_enrolled_at = NOW(), updated_at = NOW() WHERE id = $2`,
+    [templateBase64, id]
+  );
+  return getById(id);
+}
+
+export async function clearFingerprint(id: number) {
+  await query(
+    `UPDATE users SET fingerprint_template = NULL, fingerprint_enrolled_at = NULL, updated_at = NOW() WHERE id = $1`,
+    [id]
+  );
+  return getById(id);
+}
+
+export async function getEnrollmentStatus() {
+  const r = await query(`
+    SELECT id, display_name, role, avatar_color, is_active,
+           (fingerprint_template IS NOT NULL) AS has_fingerprint,
+           fingerprint_enrolled_at
+    FROM users WHERE is_active = true ORDER BY display_name
+  `);
+  return r.rows;
+}

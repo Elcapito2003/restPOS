@@ -150,6 +150,16 @@ export default function MainLayout() {
       items: [
         { label: 'Perfiles y Permisos', to: '/security', offlineDisabled: true },
         { label: 'Usuarios', to: '/users', offlineDisabled: true },
+        { divider: true, label: '' },
+        { label: 'Huellas digitales', to: '/huellas', offlineDisabled: true },
+        { label: 'Reloj checador (kiosco)', to: '/reloj', offlineDisabled: true },
+      ],
+    },
+    {
+      label: 'Personal',
+      roles: ['admin', 'manager'],
+      items: [
+        { label: 'Asistencia / Reloj checador', to: '/asistencia', offlineDisabled: true },
       ],
     },
     {

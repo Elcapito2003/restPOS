@@ -5,5 +5,7 @@ dist/
 server/.banregio-session/
 server/.ml-session/
 desktop/dist/
+desktop/zkfinger-sdk/
+desktop/test-fingerprint.js
 .claude/
 **/.claude/

@@ -52,6 +52,9 @@ import SolicitarTransferenciaPage from './pages/SolicitarTransferenciaPage';
 import AsistentePage from './pages/AsistentePage';
 import RecepcionPage from './pages/RecepcionPage';
 import ProduccionesPage from './pages/ProduccionesPage';
+import HuellasPage from './pages/HuellasPage';
+import RelojChecadorPage from './pages/RelojChecadorPage';
+import AsistenciaPage from './pages/AsistenciaPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -147,6 +150,8 @@ export default function App() {
                 {/* Seguridad */}
                 <Route path="/users" element={<R roles={['admin']}><UsersPage /></R>} />
                 <Route path="/security" element={<R roles={['admin']}><SecurityPage /></R>} />
+                <Route path="/huellas" element={<R roles={['admin']}><HuellasPage /></R>} />
+                <Route path="/asistencia" element={<R roles={['admin','manager']}><AsistenciaPage /></R>} />
 
                 {/* Configuración */}
                 <Route path="/settings" element={<R roles={['admin']}><SettingsPage /></R>} />
@@ -160,6 +165,9 @@ export default function App() {
 
               {/* Super Admin Panel */}
               <Route path="/admin" element={<AdminApp />} />
+
+              {/* Reloj checador (kiosco fullscreen, fuera del MainLayout) */}
+              <Route path="/reloj" element={<RelojChecadorPage />} />
 
               <Route path="*" element={<Navigate to="/home" />} />
             </Routes>
