@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
-import { Zap, LogOut, DoorOpen, Coffee, Bath, Flame, Snowflake } from 'lucide-react-native';
+import { Zap, LogOut, DoorOpen, Coffee, Bath, Flame, Snowflake, RefreshCw } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as Updates from 'expo-updates';
 import { useAuth } from '../context/AuthContext';
 import { getSocket, disconnectSocket } from '../socket';
 import { fetchFloors, fetchTables, Floor, Table } from '../api/client';
@@ -195,6 +196,29 @@ export default function TablesScreen({ navigation }: Props) {
 
   const handleLogout = async () => { disconnectSocket(); await logout(); };
 
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const handleCheckUpdate = async () => {
+    if (checkingUpdate) return;
+    if (__DEV__) { showInfo('Modo dev', 'Las actualizaciones OTA solo funcionan en builds de producción'); return; }
+    setCheckingUpdate(true);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        showInfo('Descargando actualización…');
+        await Updates.fetchUpdateAsync();
+        // reloadAsync reinicia con el bundle nuevo
+        await Updates.reloadAsync();
+      } else {
+        showInfo('Estás en la última versión');
+      }
+    } catch (e: any) {
+      showError('No se pudo verificar', e?.message || 'Sin conexión');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
   if (loading) {
     return (
       <View className="flex-1 bg-bg-base items-center justify-center">
@@ -219,6 +243,17 @@ export default function TablesScreen({ navigation }: Props) {
           >
             <Zap size={14} color="#fff" />
             <Text className="text-white text-xs font-bold">Rápida</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleCheckUpdate}
+            style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+            className="bg-bg-card border border-bg-border px-3 py-2 rounded-xl"
+          >
+            {checkingUpdate ? (
+              <ActivityIndicator size="small" color="#60A5FA" />
+            ) : (
+              <RefreshCw size={16} color="#60A5FA" />
+            )}
           </Pressable>
           <Pressable
             onPress={handleLogout}
