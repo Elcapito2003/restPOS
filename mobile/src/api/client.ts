@@ -27,6 +27,12 @@ export interface Table {
   daily_number?: number | null;
   waiter_id?: number | null;
   waiter_name?: string | null;
+  // Posición y forma en el mapa de mesas (mismo sistema que el desktop)
+  pos_x?: number;
+  pos_y?: number;
+  width?: number;
+  height?: number;
+  shape?: 'square' | 'round' | 'rect';
 }
 
 export interface Category {

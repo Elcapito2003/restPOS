@@ -1,23 +1,20 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable } from 'react-native';
-import { Zap, LogOut, Users } from 'lucide-react-native';
+import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
+import { Zap, LogOut, DoorOpen, Coffee, Bath, Flame, Snowflake } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '../context/AuthContext';
 import { getSocket, disconnectSocket } from '../socket';
 import { fetchFloors, fetchTables, Floor, Table } from '../api/client';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import StatusBadge from '../components/ui/StatusBadge';
 import { showError, showInfo } from '../lib/toast';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Tables'>;
 
-const STATUS_TONE: Record<string, 'success' | 'danger' | 'warning' | 'neutral'> = {
-  free: 'success',
-  occupied: 'danger',
-  reserved: 'warning',
-  blocked: 'neutral',
-};
+// Mismas dimensiones del canvas que el desktop (TableMapPage.tsx) para que las
+// posiciones x/y guardadas en BD se rendericen igual.
+const CANVAS_W = 950;
+const CANVAS_H = 630;
 
 const STATUS_LABEL: Record<string, string> = {
   free: 'Libre',
@@ -26,12 +23,105 @@ const STATUS_LABEL: Record<string, string> = {
   blocked: 'Bloqueada',
 };
 
-const STATUS_BORDER: Record<string, string> = {
-  free: '#22C55E',
-  occupied: '#EF4444',
-  reserved: '#F59E0B',
-  blocked: '#64748B',
-};
+// Estilo por estado para el botón de mesa — replicando los colores del desktop:
+// free=emerald, occupied=red con ring, reserved=amber, blocked=gray.
+function tableStyle(status: string) {
+  switch (status) {
+    case 'free':
+      return { borderColor: '#34D399', backgroundColor: '#ECFDF5' };
+    case 'occupied':
+      return { borderColor: '#F87171', backgroundColor: '#FEF2F2' };
+    case 'reserved':
+      return { borderColor: '#FBBF24', backgroundColor: '#FFFBEB' };
+    case 'blocked':
+      return { borderColor: '#9CA3AF', backgroundColor: '#E5E7EB', opacity: 0.6 };
+    default:
+      return { borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' };
+  }
+}
+
+function statusLabelColor(status: string) {
+  switch (status) {
+    case 'free': return '#10B981';
+    case 'occupied': return '#EF4444';
+    case 'reserved': return '#F59E0B';
+    case 'blocked': return '#6B7280';
+    default: return '#9CA3AF';
+  }
+}
+
+// Fondo del mapa — mismas zonas y posiciones que el desktop.
+function FloorPlanBackground() {
+  return (
+    <>
+      {/* Paredes externas (4 lineas) */}
+      <View style={{ position: 'absolute', left: 0, top: 0, width: CANVAS_W, height: 4, backgroundColor: '#E5E7EB' }} />
+      <View style={{ position: 'absolute', left: 0, top: CANVAS_H - 4, width: CANVAS_W, height: 4, backgroundColor: '#E5E7EB' }} />
+      <View style={{ position: 'absolute', left: 0, top: 0, width: 4, height: CANVAS_H, backgroundColor: '#E5E7EB' }} />
+      <View style={{ position: 'absolute', left: CANVAS_W - 4, top: 0, width: 4, height: CANVAS_H, backgroundColor: '#E5E7EB' }} />
+
+      {/* INGRESO (lado izquierdo) */}
+      <View style={{ position: 'absolute', left: -1, top: 280, width: 30, height: 100, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{
+          backgroundColor: '#FEF3C7', borderColor: '#FCD34D', borderWidth: 1,
+          borderTopRightRadius: 8, borderBottomRightRadius: 8,
+          paddingHorizontal: 4, paddingVertical: 24,
+          alignItems: 'center', gap: 4,
+        }}>
+          <DoorOpen size={16} color="#B45309" />
+          <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#92400E', transform: [{ rotate: '90deg' }] }}>INGRESO</Text>
+        </View>
+      </View>
+
+      {/* COFFEE BAR (centro) */}
+      <View style={{
+        position: 'absolute', left: 180, top: 230, width: 440, height: 200,
+        backgroundColor: 'rgba(199, 210, 254, 0.6)',
+        borderColor: '#A5B4FC', borderWidth: 2, borderRadius: 8,
+        alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Coffee size={28} color="#6366F1" />
+        <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#4338CA', letterSpacing: 2, marginTop: 4 }}>COFFEE BAR</Text>
+        <Text style={{ fontSize: 10, color: '#6366F1', marginTop: 4 }}>Caja · Cafetería · Frigobar</Text>
+      </View>
+
+      {/* BAÑO (derecha del coffee bar) */}
+      <View style={{
+        position: 'absolute', left: 640, top: 230, width: 140, height: 200,
+        backgroundColor: 'rgba(186, 230, 253, 0.6)',
+        borderColor: '#7DD3FC', borderWidth: 2, borderRadius: 8,
+        alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Bath size={24} color="#0EA5E9" />
+        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#0369A1', marginTop: 4 }}>BAÑO</Text>
+      </View>
+
+      {/* COCINA CALIENTE (extremo derecho arriba) */}
+      <View style={{
+        position: 'absolute', left: 800, top: 10, width: 140, height: 290,
+        backgroundColor: 'rgba(254, 202, 202, 0.5)',
+        borderColor: '#FCA5A5', borderWidth: 2, borderRadius: 8,
+        alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Flame size={22} color="#EF4444" />
+        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#B91C1C', marginTop: 4 }}>COCINA</Text>
+        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#B91C1C' }}>CALIENTE</Text>
+      </View>
+
+      {/* COCINA FRÍA (extremo derecho abajo) */}
+      <View style={{
+        position: 'absolute', left: 800, top: 320, width: 140, height: 160,
+        backgroundColor: 'rgba(252, 231, 243, 0.5)',
+        borderColor: '#F9A8D4', borderWidth: 2, borderRadius: 8,
+        alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Snowflake size={22} color="#EC4899" />
+        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#9D174D', marginTop: 4 }}>COCINA</Text>
+        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#9D174D' }}>FRÍA</Text>
+      </View>
+    </>
+  );
+}
 
 export default function TablesScreen({ navigation }: Props) {
   const { user, token, tenant, logout } = useAuth();
@@ -40,6 +130,12 @@ export default function TablesScreen({ navigation }: Props) {
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { width: screenW } = useWindowDimensions();
+
+  // Escala el canvas para que ocupe todo el ancho de la pantalla. El alto
+  // ajusta proporcionalmente. Si la pantalla es muy chica todo se ve mini —
+  // se puede hacer pinch (no implementado todavía) o scrollear vertical.
+  const scale = (screenW - 16) / CANVAS_W; // 16 = padding lateral
 
   const loadFloors = async () => {
     try {
@@ -134,67 +230,98 @@ export default function TablesScreen({ navigation }: Props) {
         </View>
       </View>
 
-      {/* Floor tabs */}
-      {floors.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="max-h-12 mb-2" contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}>
-          {floors.map(f => {
-            const active = activeFloor?.id === f.id;
-            return (
-              <Pressable
-                key={f.id}
-                onPress={() => { setActiveFloor(f); Haptics.selectionAsync(); }}
-                className={`px-4 py-2 rounded-xl border ${active ? 'bg-brand-700 border-brand-500' : 'bg-bg-card border-bg-border'}`}
-              >
-                <Text className={`text-sm font-medium ${active ? 'text-white' : 'text-ink-secondary'}`}>{f.name}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      )}
+      {/* Floor tabs + leyenda */}
+      <View className="flex-row items-center px-3 mb-2 gap-2">
+        {floors.length > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} className="flex-1">
+            {floors.map(f => {
+              const active = activeFloor?.id === f.id;
+              return (
+                <Pressable
+                  key={f.id}
+                  onPress={() => { setActiveFloor(f); Haptics.selectionAsync(); }}
+                  className={`px-3 py-1.5 rounded-lg border ${active ? 'bg-brand-700 border-brand-500' : 'bg-bg-card border-bg-border'}`}
+                >
+                  <Text className={`text-xs font-medium ${active ? 'text-white' : 'text-ink-secondary'}`}>{f.name}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
+        <View className="flex-row items-center gap-3">
+          {(['free','occupied','reserved'] as const).map(s => (
+            <View key={s} className="flex-row items-center gap-1">
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusLabelColor(s) }} />
+              <Text className="text-ink-muted text-[10px]">{STATUS_LABEL[s]}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
 
-      {/* Grid */}
+      {/* Mapa de mesas — mismo layout que desktop, escalado al ancho de la pantalla */}
       <ScrollView
-        contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
+        contentContainerStyle={{ padding: 8, alignItems: 'center' }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#60A5FA" />}
       >
-        <View className="flex-row flex-wrap" style={{ gap: 10 }}>
-          {tables.map(t => (
-            <Pressable
-              key={t.id}
-              onPress={() => handleTablePress(t)}
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.85 : 1,
-                width: '31%',
-                aspectRatio: 1,
-                borderColor: STATUS_BORDER[t.status] || '#1E293B',
-                borderWidth: 2,
-              })}
-              className="bg-bg-card rounded-2xl p-2 items-center justify-center relative"
-            >
-              <View
-                style={{ backgroundColor: STATUS_BORDER[t.status] || '#1E293B' }}
-                className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full"
-              />
-              <Text className="text-ink-primary text-2xl font-bold">{t.label}</Text>
-              <View className="flex-row items-center gap-1 mt-1">
-                <Users size={10} color="#64748B" />
-                <Text className="text-ink-muted text-[10px]">{t.capacity} pax</Text>
-              </View>
-              <View className="mt-2">
-                <StatusBadge label={STATUS_LABEL[t.status]} tone={STATUS_TONE[t.status]} />
-              </View>
-              {t.status === 'occupied' && !!t.daily_number && (
-                <Text className="text-ink-muted text-[10px] mt-1">#{t.daily_number}</Text>
-              )}
-              {t.status === 'occupied' && !!t.waiter_name && (
-                <Text className="text-ink-secondary text-[10px]" numberOfLines={1}>{t.waiter_name}</Text>
-              )}
-            </Pressable>
-          ))}
-          {tables.length === 0 && (
-            <Text className="text-ink-muted w-full text-center py-12">Sin mesas en este piso</Text>
-          )}
+        {/* Wrapper con tamaño escalado para que el ScrollView sepa cuánto espacio reservar */}
+        <View style={{ width: CANVAS_W * scale, height: CANVAS_H * scale }}>
+          {/* Canvas a tamaño real con transform scale aplicado desde la esquina superior izquierda */}
+          <View style={{
+            width: CANVAS_W,
+            height: CANVAS_H,
+            backgroundColor: '#FFFFFF',
+            borderRadius: 12,
+            transform: [{ scale }],
+            transformOrigin: 'top left',
+          }}>
+            <FloorPlanBackground />
+            {tables.map(t => {
+              const style = tableStyle(t.status);
+              const labelColor = statusLabelColor(t.status);
+              const isBar = t.label.startsWith('B');
+              return (
+                <Pressable
+                  key={t.id}
+                  onPress={() => handleTablePress(t)}
+                  style={({ pressed }) => ({
+                    position: 'absolute',
+                    left: t.pos_x,
+                    top: t.pos_y,
+                    width: t.width || 80,
+                    height: t.height || 80,
+                    borderRadius: t.shape === 'round' ? (t.width || 80) / 2 : 12,
+                    borderWidth: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: (style as any).opacity ?? (pressed ? 0.7 : 1),
+                    backgroundColor: style.backgroundColor,
+                    borderColor: style.borderColor,
+                    // Anillo extra para mesa ocupada
+                    ...(t.status === 'occupied' ? { shadowColor: '#FECACA', shadowOpacity: 1, shadowRadius: 4, elevation: 4 } : {}),
+                  })}
+                >
+                  <Text style={{ fontWeight: 'bold', fontSize: isBar ? 14 : 18, color: '#1F2937' }}>{t.label}</Text>
+                  <View style={{
+                    backgroundColor: labelColor,
+                    paddingHorizontal: 6, paddingVertical: 2,
+                    borderRadius: 999, marginTop: 2,
+                  }}>
+                    <Text style={{ color: 'white', fontSize: 9, fontWeight: '600' }}>{STATUS_LABEL[t.status]}</Text>
+                  </View>
+                  {t.status === 'occupied' && !!t.daily_number && (
+                    <Text style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>#{t.daily_number}</Text>
+                  )}
+                  {t.status === 'occupied' && !!t.waiter_name && (
+                    <Text style={{ fontSize: 9, color: '#374151' }} numberOfLines={1}>{t.waiter_name}</Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
+        {tables.length === 0 && (
+          <Text className="text-ink-muted text-center py-12">Sin mesas en este piso</Text>
+        )}
       </ScrollView>
     </View>
   );
