@@ -266,6 +266,13 @@ export async function getMyShift(): Promise<Shift | null> {
   return res.data || null;
 }
 
+// Devuelve todos los turnos abiertos en el tenant. El comandero lo usa para
+// saber si el cajero abrió turno (no le pide al mesero abrir uno propio).
+export async function getOpenShifts(): Promise<Array<Shift & { display_name: string; role: string; avatar_color: string }>> {
+  const res = await api.get('/shifts');
+  return res.data || [];
+}
+
 export async function openShift(startingCash: number, notes?: string): Promise<Shift> {
   const res = await api.post('/shifts/open', { starting_cash: startingCash, notes: notes || undefined });
   return res.data;

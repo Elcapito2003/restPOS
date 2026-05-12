@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable } from 'react-native';
 import { Zap, LogOut, DoorOpen, Coffee, Bath, Flame, Snowflake, RefreshCw } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Updates from 'expo-updates';
@@ -131,12 +131,6 @@ export default function TablesScreen({ navigation }: Props) {
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { width: screenW } = useWindowDimensions();
-
-  // Escala el canvas para que ocupe todo el ancho de la pantalla. El alto
-  // ajusta proporcionalmente. Si la pantalla es muy chica todo se ve mini —
-  // se puede hacer pinch (no implementado todavía) o scrollear vertical.
-  const scale = (screenW - 16) / CANVAS_W; // 16 = padding lateral
 
   const loadFloors = async () => {
     try {
@@ -293,27 +287,34 @@ export default function TablesScreen({ navigation }: Props) {
         </View>
       </View>
 
-      {/* Mapa de mesas — mismo layout que desktop, escalado al ancho de la pantalla */}
+      {/* Mapa de mesas — mismo layout que desktop. ScrollView vertical externo
+          contiene ScrollView horizontal con el canvas a tamaño real (950x630).
+          El user hace pan natural con el dedo. NO escalamos con transform
+          porque transformOrigin no existe en React Native. */}
       <ScrollView
-        contentContainerStyle={{ padding: 8, alignItems: 'center' }}
+        contentContainerStyle={{ paddingVertical: 4 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#60A5FA" />}
       >
-        {/* Wrapper con tamaño escalado para que el ScrollView sepa cuánto espacio reservar */}
-        <View style={{ width: CANVAS_W * scale, height: CANVAS_H * scale }}>
-          {/* Canvas a tamaño real con transform scale aplicado desde la esquina superior izquierda */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator
+          contentContainerStyle={{ padding: 8 }}
+        >
           <View style={{
             width: CANVAS_W,
             height: CANVAS_H,
             backgroundColor: '#FFFFFF',
             borderRadius: 12,
-            transform: [{ scale }],
-            transformOrigin: 'top left',
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
           }}>
             <FloorPlanBackground />
             {tables.map(t => {
               const style = tableStyle(t.status);
               const labelColor = statusLabelColor(t.status);
               const isBar = t.label.startsWith('B');
+              const tw = t.width || 80;
+              const th = t.height || 80;
               return (
                 <Pressable
                   key={t.id}
@@ -322,17 +323,15 @@ export default function TablesScreen({ navigation }: Props) {
                     position: 'absolute',
                     left: t.pos_x,
                     top: t.pos_y,
-                    width: t.width || 80,
-                    height: t.height || 80,
-                    borderRadius: t.shape === 'round' ? (t.width || 80) / 2 : 12,
+                    width: tw,
+                    height: th,
+                    borderRadius: t.shape === 'round' ? tw / 2 : 12,
                     borderWidth: 2,
                     alignItems: 'center',
                     justifyContent: 'center',
                     opacity: (style as any).opacity ?? (pressed ? 0.7 : 1),
                     backgroundColor: style.backgroundColor,
                     borderColor: style.borderColor,
-                    // Anillo extra para mesa ocupada
-                    ...(t.status === 'occupied' ? { shadowColor: '#FECACA', shadowOpacity: 1, shadowRadius: 4, elevation: 4 } : {}),
                   })}
                 >
                   <Text style={{ fontWeight: 'bold', fontSize: isBar ? 14 : 18, color: '#1F2937' }}>{t.label}</Text>
@@ -353,10 +352,13 @@ export default function TablesScreen({ navigation }: Props) {
               );
             })}
           </View>
-        </View>
+        </ScrollView>
         {tables.length === 0 && (
           <Text className="text-ink-muted text-center py-12">Sin mesas en este piso</Text>
         )}
+        <Text className="text-ink-muted text-[10px] text-center mt-2 px-4">
+          Desliza horizontal y vertical para ver todo el mapa.
+        </Text>
       </ScrollView>
     </View>
   );

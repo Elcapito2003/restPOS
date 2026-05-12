@@ -1,55 +1,72 @@
-import { ReactNode, useEffect, useState, useCallback } from 'react';
-import { View, Text, ActivityIndicator, TextInput, Pressable, Modal } from 'react-native';
-import { Clock, DollarSign, LogOut } from 'lucide-react-native';
+import { ReactNode, useEffect, useState, useCallback, useRef } from 'react';
+import { View, Text, ActivityIndicator, Pressable } from 'react-native';
+import { Clock, LogOut, RefreshCw, AlertCircle } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
-import { getMyShift, openShift, Shift } from '../api/client';
+import { getOpenShifts, getMyShift } from '../api/client';
 import { api } from '../api/client';
-import { showSuccess, showError } from '../lib/toast';
+import { showInfo } from '../lib/toast';
 import Button from './ui/Button';
 
+// Política:
+// - admin: pasa siempre.
+// - waiter (mesero): NO abre turno propio. Solo verifica que haya UNO abierto
+//   en el sistema. Si no, muestra "Esperando apertura" con boton refresh.
+// - manager/cashier: abre su propio turno (manejan efectivo) — fallback a la
+//   pantalla forzada con form (sin cambios respecto a antes).
 export default function ShiftGate({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isWaiter = user?.role === 'waiter';
 
   const [loading, setLoading] = useState(true);
-  const [shift, setShift] = useState<Shift | null>(null);
-  const [forceOpen, setForceOpen] = useState(false);
+  const [hasGlobalShift, setHasGlobalShift] = useState<boolean | null>(null);
+  const [openByName, setOpenByName] = useState<string | null>(null);
+  const pollRef = useRef<any>(null);
 
-  const refreshShift = useCallback(async () => {
-    if (!user || isAdmin) {
-      setLoading(false);
-      return;
-    }
+  const refresh = useCallback(async () => {
+    if (!user || isAdmin) { setLoading(false); return; }
     try {
-      const s = await getMyShift();
-      setShift(s);
+      if (isWaiter) {
+        const shifts = await getOpenShifts();
+        setHasGlobalShift(shifts.length > 0);
+        setOpenByName(shifts[0]?.display_name || null);
+      } else {
+        // cashier/manager: chequea su propio turno
+        const mine = await getMyShift();
+        setHasGlobalShift(!!mine);
+      }
     } catch {
-      // ignore — server may be temporarily unreachable
+      // server unreachable — no rompemos, dejamos pasar a la pantalla
     } finally {
       setLoading(false);
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, isWaiter]);
 
+  useEffect(() => { refresh(); }, [refresh]);
+
+  // Si está esperando turno, polea cada 10s
   useEffect(() => {
-    refreshShift();
-  }, [refreshShift]);
+    if (isAdmin || hasGlobalShift !== false) return;
+    pollRef.current = setInterval(refresh, 10000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [hasGlobalShift, isAdmin, refresh]);
 
-  // Interceptor: detect 403 SHIFT_REQUIRED and force open
+  // Interceptor: detecta 403 SHIFT_REQUIRED_GLOBAL (mesero) o SHIFT_REQUIRED
+  // (cajero) y vuelve a chequear el estado.
   useEffect(() => {
     if (!user || isAdmin) return;
     const id = api.interceptors.response.use(
-      (res) => res,
+      (r) => r,
       (err) => {
-        if (err?.response?.status === 403 && err?.response?.data?.code === 'SHIFT_REQUIRED') {
-          setForceOpen(true);
+        const code = err?.response?.data?.code;
+        if (err?.response?.status === 403 && (code === 'SHIFT_REQUIRED' || code === 'SHIFT_REQUIRED_GLOBAL')) {
+          refresh();
         }
         return Promise.reject(err);
       }
     );
-    return () => {
-      api.interceptors.response.eject(id);
-    };
-  }, [user, isAdmin]);
+    return () => { api.interceptors.response.eject(id); };
+  }, [user, isAdmin, refresh]);
 
   if (!user || isAdmin) return <>{children}</>;
   if (loading) {
@@ -61,111 +78,56 @@ export default function ShiftGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (shift && !forceOpen) {
-    return <>{children}</>;
-  }
+  if (hasGlobalShift) return <>{children}</>;
 
+  // No hay turno: mesero ve "esperando", cajero/manager ven "abre tu turno"
+  // pero en el comandero no debería tocar — se asume que abren desde desktop.
   return (
-    <ForcedShiftView
-      onSuccess={(s) => {
-        setShift(s);
-        setForceOpen(false);
-      }}
-      onLogout={() => {
-        logout();
-      }}
+    <WaitingShiftView
+      isWaiter={isWaiter}
+      onRefresh={() => { showInfo('Verificando...'); refresh(); }}
+      onLogout={logout}
     />
   );
 }
 
-function ForcedShiftView({ onSuccess, onLogout }: { onSuccess: (s: Shift) => void; onLogout: () => void }) {
-  const { user } = useAuth();
-  const [amount, setAmount] = useState('');
-  const [notes, setNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  const num = parseFloat(amount);
-  const valid = !isNaN(num) && num > 0;
-
-  const handleOpen = async () => {
-    if (!valid || submitting) return;
-    setSubmitting(true);
-    try {
-      const s = await openShift(num, notes || undefined);
-      showSuccess('Turno abierto', `Fondo: $${num.toFixed(2)}`);
-      onSuccess(s);
-    } catch (e: any) {
-      showError('Error al abrir turno', e?.response?.data?.error || e.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
+function WaitingShiftView({ isWaiter, onRefresh, onLogout }: { isWaiter: boolean; onRefresh: () => void; onLogout: () => void }) {
   return (
-    <View className="flex-1 bg-bg-base px-6 pt-16 pb-8">
-      <View className="flex-1 justify-center">
-        <View className="items-center mb-6">
-          <View className="w-20 h-20 rounded-full bg-brand-500/15 items-center justify-center mb-3">
-            <Clock size={40} color="#60A5FA" />
-          </View>
-          <Text className="text-ink-primary text-2xl font-bold">Abre tu turno</Text>
-          <Text className="text-ink-secondary text-center mt-2">
-            Hola <Text className="font-semibold text-ink-primary">{user?.display_name}</Text>, antes de tomar órdenes captura el efectivo en caja.
-          </Text>
+    <View className="flex-1 bg-bg-base px-6 pt-16 pb-8 justify-center">
+      <View className="items-center mb-8">
+        <View className="w-24 h-24 rounded-full bg-amber-500/15 items-center justify-center mb-4">
+          <AlertCircle size={56} color="#F59E0B" />
         </View>
-
-        <View className="bg-bg-card border border-bg-border rounded-2xl p-5 mb-4">
-          <View className="flex-row items-center mb-2">
-            <DollarSign size={16} color="#94A3B8" />
-            <Text className="text-ink-secondary ml-1.5 font-medium">
-              Fondo inicial <Text className="text-danger">*</Text>
-            </Text>
-          </View>
-          <View className="flex-row items-center bg-bg-elevated rounded-xl px-4 py-3">
-            <Text className="text-ink-muted text-2xl font-bold mr-2">$</Text>
-            <TextInput
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              placeholderTextColor="#475569"
-              autoFocus
-              className="flex-1 text-ink-primary text-2xl font-bold"
-            />
-          </View>
-          <Text className="text-ink-muted text-xs mt-2">Cuenta el efectivo en la caja. Debe ser mayor a 0.</Text>
-        </View>
-
-        <View className="bg-bg-card border border-bg-border rounded-2xl p-5 mb-4">
-          <Text className="text-ink-secondary font-medium mb-2">Notas (opcional)</Text>
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Ej: Turno matutino"
-            placeholderTextColor="#475569"
-            className="bg-bg-elevated rounded-xl px-4 py-3 text-ink-primary"
-          />
-        </View>
-
-        <Button
-          variant="primary"
-          size="lg"
-          fullWidth
-          loading={submitting}
-          disabled={!valid}
-          onPress={handleOpen}
-          leftIcon={<Clock size={20} color="#fff" />}
-        >
-          Abrir turno
-        </Button>
-
-        <Pressable onPress={onLogout} className="items-center mt-5 py-2">
-          <View className="flex-row items-center gap-1.5">
-            <LogOut size={14} color="#94A3B8" />
-            <Text className="text-ink-secondary text-sm">Cerrar sesión y entrar como otro</Text>
-          </View>
-        </Pressable>
+        <Text className="text-ink-primary text-2xl font-bold text-center">
+          {isWaiter ? 'Esperando apertura de turno' : 'No hay turno abierto'}
+        </Text>
+        <Text className="text-ink-secondary text-center mt-3 px-4">
+          {isWaiter
+            ? 'Pide al cajero o admin que abra turno desde la app de RestPOS en la caja. Una vez abierto, podrás tomar pedidos.'
+            : 'Abre tu turno desde la app de escritorio en la caja antes de operar desde el comandero.'}
+        </Text>
       </View>
+
+      <Button
+        variant="primary"
+        size="lg"
+        fullWidth
+        onPress={onRefresh}
+        leftIcon={<RefreshCw size={20} color="#fff" />}
+      >
+        Verificar otra vez
+      </Button>
+
+      <Text className="text-ink-muted text-xs text-center mt-3">
+        Se verifica automáticamente cada 10 segundos.
+      </Text>
+
+      <Pressable onPress={onLogout} className="items-center mt-6 py-2">
+        <View className="flex-row items-center gap-1.5">
+          <LogOut size={14} color="#94A3B8" />
+          <Text className="text-ink-secondary text-sm">Cerrar sesión</Text>
+        </View>
+      </Pressable>
     </View>
   );
 }
