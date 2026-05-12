@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
 import { Zap, LogOut, DoorOpen, Coffee, Bath, Flame, Snowflake, RefreshCw } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Updates from 'expo-updates';
@@ -12,8 +12,10 @@ import { showError, showInfo } from '../lib/toast';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Tables'>;
 
-// Mismas dimensiones del canvas que el desktop (TableMapPage.tsx) para que las
-// posiciones x/y guardadas en BD se rendericen igual.
+// Canvas del desktop = 950x630. Para el mobile escalamos todo proporcional al
+// ancho de la pantalla. Multiplicamos pos_x/pos_y/width/height por `scale` —
+// nada de transform, todo dimensión real para que React Native respete el
+// layout absoluto sin sorpresas.
 const CANVAS_W = 950;
 const CANVAS_H = 630;
 
@@ -24,101 +26,64 @@ const STATUS_LABEL: Record<string, string> = {
   blocked: 'Bloqueada',
 };
 
-// Estilo por estado para el botón de mesa — replicando los colores del desktop:
-// free=emerald, occupied=red con ring, reserved=amber, blocked=gray.
 function tableStyle(status: string) {
   switch (status) {
-    case 'free':
-      return { borderColor: '#34D399', backgroundColor: '#ECFDF5' };
-    case 'occupied':
-      return { borderColor: '#F87171', backgroundColor: '#FEF2F2' };
-    case 'reserved':
-      return { borderColor: '#FBBF24', backgroundColor: '#FFFBEB' };
-    case 'blocked':
-      return { borderColor: '#9CA3AF', backgroundColor: '#E5E7EB', opacity: 0.6 };
-    default:
-      return { borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' };
+    case 'free':     return { borderColor: '#22C55E', backgroundColor: '#DCFCE7' };
+    case 'occupied': return { borderColor: '#EF4444', backgroundColor: '#FECACA' };
+    case 'reserved': return { borderColor: '#F59E0B', backgroundColor: '#FEF3C7' };
+    case 'blocked':  return { borderColor: '#9CA3AF', backgroundColor: '#E5E7EB', opacity: 0.5 };
+    default:         return { borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' };
   }
 }
-
-function statusLabelColor(status: string) {
+function statusDot(status: string) {
   switch (status) {
-    case 'free': return '#10B981';
+    case 'free': return '#22C55E';
     case 'occupied': return '#EF4444';
     case 'reserved': return '#F59E0B';
-    case 'blocked': return '#6B7280';
-    default: return '#9CA3AF';
+    case 'blocked': return '#9CA3AF';
+    default: return '#94A3B8';
   }
 }
 
-// Fondo del mapa — mismas zonas y posiciones que el desktop.
-function FloorPlanBackground() {
+function FloorPlanBackground({ scale }: { scale: number }) {
+  // Helper para escalar valores
+  const s = (v: number) => v * scale;
   return (
     <>
-      {/* Paredes externas (4 lineas) */}
-      <View style={{ position: 'absolute', left: 0, top: 0, width: CANVAS_W, height: 4, backgroundColor: '#E5E7EB' }} />
-      <View style={{ position: 'absolute', left: 0, top: CANVAS_H - 4, width: CANVAS_W, height: 4, backgroundColor: '#E5E7EB' }} />
-      <View style={{ position: 'absolute', left: 0, top: 0, width: 4, height: CANVAS_H, backgroundColor: '#E5E7EB' }} />
-      <View style={{ position: 'absolute', left: CANVAS_W - 4, top: 0, width: 4, height: CANVAS_H, backgroundColor: '#E5E7EB' }} />
+      {/* Bordes */}
+      <View style={{ position: 'absolute', left: 0, top: 0, width: s(CANVAS_W), height: s(4), backgroundColor: '#E5E7EB' }} />
+      <View style={{ position: 'absolute', left: 0, top: s(CANVAS_H - 4), width: s(CANVAS_W), height: s(4), backgroundColor: '#E5E7EB' }} />
+      <View style={{ position: 'absolute', left: 0, top: 0, width: s(4), height: s(CANVAS_H), backgroundColor: '#E5E7EB' }} />
+      <View style={{ position: 'absolute', left: s(CANVAS_W - 4), top: 0, width: s(4), height: s(CANVAS_H), backgroundColor: '#E5E7EB' }} />
 
-      {/* INGRESO (lado izquierdo) */}
-      <View style={{ position: 'absolute', left: -1, top: 280, width: 30, height: 100, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{
-          backgroundColor: '#FEF3C7', borderColor: '#FCD34D', borderWidth: 1,
-          borderTopRightRadius: 8, borderBottomRightRadius: 8,
-          paddingHorizontal: 4, paddingVertical: 24,
-          alignItems: 'center', gap: 4,
-        }}>
-          <DoorOpen size={16} color="#B45309" />
-          <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#92400E', transform: [{ rotate: '90deg' }] }}>INGRESO</Text>
-        </View>
+      {/* INGRESO */}
+      <View style={{ position: 'absolute', left: 0, top: s(280), width: s(30), height: s(100), alignItems: 'center', justifyContent: 'center', backgroundColor: '#FEF3C7', borderColor: '#FCD34D', borderWidth: 1, borderTopRightRadius: s(8), borderBottomRightRadius: s(8) }}>
+        <DoorOpen size={Math.max(10, s(14))} color="#B45309" />
       </View>
 
-      {/* COFFEE BAR (centro) */}
-      <View style={{
-        position: 'absolute', left: 180, top: 230, width: 440, height: 200,
-        backgroundColor: 'rgba(199, 210, 254, 0.6)',
-        borderColor: '#A5B4FC', borderWidth: 2, borderRadius: 8,
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Coffee size={28} color="#6366F1" />
-        <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#4338CA', letterSpacing: 2, marginTop: 4 }}>COFFEE BAR</Text>
-        <Text style={{ fontSize: 10, color: '#6366F1', marginTop: 4 }}>Caja · Cafetería · Frigobar</Text>
+      {/* COFFEE BAR */}
+      <View style={{ position: 'absolute', left: s(180), top: s(230), width: s(440), height: s(200), backgroundColor: '#E0E7FF', borderColor: '#A5B4FC', borderWidth: 2, borderRadius: s(8), alignItems: 'center', justifyContent: 'center' }}>
+        <Coffee size={Math.max(12, s(22))} color="#6366F1" />
+        <Text style={{ fontSize: Math.max(7, s(11)), fontWeight: 'bold', color: '#4338CA', letterSpacing: 1.5, marginTop: s(2) }}>COFFEE BAR</Text>
       </View>
 
-      {/* BAÑO (derecha del coffee bar) */}
-      <View style={{
-        position: 'absolute', left: 640, top: 230, width: 140, height: 200,
-        backgroundColor: 'rgba(186, 230, 253, 0.6)',
-        borderColor: '#7DD3FC', borderWidth: 2, borderRadius: 8,
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Bath size={24} color="#0EA5E9" />
-        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#0369A1', marginTop: 4 }}>BAÑO</Text>
+      {/* BAÑO */}
+      <View style={{ position: 'absolute', left: s(640), top: s(230), width: s(140), height: s(200), backgroundColor: '#E0F2FE', borderColor: '#7DD3FC', borderWidth: 2, borderRadius: s(8), alignItems: 'center', justifyContent: 'center' }}>
+        <Bath size={Math.max(10, s(20))} color="#0EA5E9" />
+        <Text style={{ fontSize: Math.max(6, s(10)), fontWeight: 'bold', color: '#0369A1', marginTop: s(2) }}>BAÑO</Text>
       </View>
 
-      {/* COCINA CALIENTE (extremo derecho arriba) */}
-      <View style={{
-        position: 'absolute', left: 800, top: 10, width: 140, height: 290,
-        backgroundColor: 'rgba(254, 202, 202, 0.5)',
-        borderColor: '#FCA5A5', borderWidth: 2, borderRadius: 8,
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Flame size={22} color="#EF4444" />
-        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#B91C1C', marginTop: 4 }}>COCINA</Text>
-        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#B91C1C' }}>CALIENTE</Text>
+      {/* COCINA CALIENTE */}
+      <View style={{ position: 'absolute', left: s(800), top: s(10), width: s(140), height: s(290), backgroundColor: '#FEE2E2', borderColor: '#FCA5A5', borderWidth: 2, borderRadius: s(8), alignItems: 'center', justifyContent: 'center' }}>
+        <Flame size={Math.max(10, s(18))} color="#EF4444" />
+        <Text style={{ fontSize: Math.max(6, s(9)), fontWeight: 'bold', color: '#B91C1C', marginTop: s(2) }}>COCINA</Text>
+        <Text style={{ fontSize: Math.max(6, s(9)), fontWeight: 'bold', color: '#B91C1C' }}>CALIENTE</Text>
       </View>
 
-      {/* COCINA FRÍA (extremo derecho abajo) */}
-      <View style={{
-        position: 'absolute', left: 800, top: 320, width: 140, height: 160,
-        backgroundColor: 'rgba(252, 231, 243, 0.5)',
-        borderColor: '#F9A8D4', borderWidth: 2, borderRadius: 8,
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Snowflake size={22} color="#EC4899" />
-        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#9D174D', marginTop: 4 }}>COCINA</Text>
-        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#9D174D' }}>FRÍA</Text>
+      {/* COCINA FRÍA */}
+      <View style={{ position: 'absolute', left: s(800), top: s(320), width: s(140), height: s(160), backgroundColor: '#FCE7F3', borderColor: '#F9A8D4', borderWidth: 2, borderRadius: s(8), alignItems: 'center', justifyContent: 'center' }}>
+        <Snowflake size={Math.max(10, s(18))} color="#EC4899" />
+        <Text style={{ fontSize: Math.max(6, s(9)), fontWeight: 'bold', color: '#9D174D', marginTop: s(2) }}>FRÍA</Text>
       </View>
     </>
   );
@@ -131,6 +96,15 @@ export default function TablesScreen({ navigation }: Props) {
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const { width: screenW } = useWindowDimensions();
+
+  // Padding lateral del contenedor + un poco extra para que respire
+  const HORIZONTAL_PADDING = 16;
+  const scale = (screenW - HORIZONTAL_PADDING) / CANVAS_W;
+  const canvasW = CANVAS_W * scale;
+  const canvasH = CANVAS_H * scale;
+  const s = (v: number) => v * scale;
 
   const loadFloors = async () => {
     try {
@@ -153,7 +127,6 @@ export default function TablesScreen({ navigation }: Props) {
   useEffect(() => { (async () => { await loadFloors(); setLoading(false); })(); }, []);
   useEffect(() => { if (activeFloor) loadTables(activeFloor.id); }, [activeFloor, loadTables]);
 
-  // Socket
   useEffect(() => {
     if (!token || !activeFloor) return;
     const socket = getSocket(token);
@@ -190,7 +163,6 @@ export default function TablesScreen({ navigation }: Props) {
 
   const handleLogout = async () => { disconnectSocket(); await logout(); };
 
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
   const handleCheckUpdate = async () => {
     if (checkingUpdate) return;
     if (__DEV__) { showInfo('Modo dev', 'Las actualizaciones OTA solo funcionan en builds de producción'); return; }
@@ -201,7 +173,6 @@ export default function TablesScreen({ navigation }: Props) {
       if (result.isAvailable) {
         showInfo('Descargando actualización…');
         await Updates.fetchUpdateAsync();
-        // reloadAsync reinicia con el bundle nuevo
         await Updates.reloadAsync();
       } else {
         showInfo('Estás en la última versión');
@@ -243,11 +214,7 @@ export default function TablesScreen({ navigation }: Props) {
             style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
             className="bg-bg-card border border-bg-border px-3 py-2 rounded-xl"
           >
-            {checkingUpdate ? (
-              <ActivityIndicator size="small" color="#60A5FA" />
-            ) : (
-              <RefreshCw size={16} color="#60A5FA" />
-            )}
+            {checkingUpdate ? <ActivityIndicator size="small" color="#60A5FA" /> : <RefreshCw size={16} color="#60A5FA" />}
           </Pressable>
           <Pressable
             onPress={handleLogout}
@@ -261,7 +228,7 @@ export default function TablesScreen({ navigation }: Props) {
 
       {/* Floor tabs + leyenda */}
       <View className="flex-row items-center px-3 mb-2 gap-2">
-        {floors.length > 1 && (
+        {floors.length > 1 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} className="flex-1">
             {floors.map(f => {
               const active = activeFloor?.id === f.id;
@@ -276,88 +243,75 @@ export default function TablesScreen({ navigation }: Props) {
               );
             })}
           </ScrollView>
-        )}
-        <View className="flex-row items-center gap-3">
-          {(['free','occupied','reserved'] as const).map(s => (
-            <View key={s} className="flex-row items-center gap-1">
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusLabelColor(s) }} />
-              <Text className="text-ink-muted text-[10px]">{STATUS_LABEL[s]}</Text>
+        ) : <View className="flex-1" />}
+        <View className="flex-row items-center gap-2.5">
+          {(['free','occupied','reserved'] as const).map(st => (
+            <View key={st} className="flex-row items-center gap-1">
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusDot(st) }} />
+              <Text className="text-ink-muted text-[10px]">{STATUS_LABEL[st]}</Text>
             </View>
           ))}
         </View>
       </View>
 
-      {/* Mapa de mesas — mismo layout que desktop. ScrollView vertical externo
-          contiene ScrollView horizontal con el canvas a tamaño real (950x630).
-          El user hace pan natural con el dedo. NO escalamos con transform
-          porque transformOrigin no existe en React Native. */}
+      {/* Canvas escalado al ancho de la pantalla — todo visible sin scroll horizontal */}
       <ScrollView
-        contentContainerStyle={{ paddingVertical: 4 }}
+        contentContainerStyle={{ alignItems: 'center', paddingVertical: 8, paddingHorizontal: HORIZONTAL_PADDING / 2 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#60A5FA" />}
       >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator
-          contentContainerStyle={{ padding: 8 }}
-        >
-          <View style={{
-            width: CANVAS_W,
-            height: CANVAS_H,
-            backgroundColor: '#FFFFFF',
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: '#E5E7EB',
-          }}>
-            <FloorPlanBackground />
-            {tables.map(t => {
-              const style = tableStyle(t.status);
-              const labelColor = statusLabelColor(t.status);
-              const isBar = t.label.startsWith('B');
-              const tw = t.width || 80;
-              const th = t.height || 80;
-              return (
-                <Pressable
-                  key={t.id}
-                  onPress={() => handleTablePress(t)}
-                  style={({ pressed }) => ({
-                    position: 'absolute',
-                    left: t.pos_x,
-                    top: t.pos_y,
-                    width: tw,
-                    height: th,
-                    borderRadius: t.shape === 'round' ? tw / 2 : 12,
-                    borderWidth: 2,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: (style as any).opacity ?? (pressed ? 0.7 : 1),
-                    backgroundColor: style.backgroundColor,
-                    borderColor: style.borderColor,
-                  })}
-                >
-                  <Text style={{ fontWeight: 'bold', fontSize: isBar ? 14 : 18, color: '#1F2937' }}>{t.label}</Text>
-                  <View style={{
-                    backgroundColor: labelColor,
-                    paddingHorizontal: 6, paddingVertical: 2,
-                    borderRadius: 999, marginTop: 2,
-                  }}>
-                    <Text style={{ color: 'white', fontSize: 9, fontWeight: '600' }}>{STATUS_LABEL[t.status]}</Text>
-                  </View>
-                  {t.status === 'occupied' && !!t.daily_number && (
-                    <Text style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>#{t.daily_number}</Text>
-                  )}
-                  {t.status === 'occupied' && !!t.waiter_name && (
-                    <Text style={{ fontSize: 9, color: '#374151' }} numberOfLines={1}>{t.waiter_name}</Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        </ScrollView>
+        <View style={{
+          width: canvasW,
+          height: canvasH,
+          backgroundColor: '#FFFFFF',
+          borderRadius: 8,
+          overflow: 'hidden',
+          position: 'relative',
+        }}>
+          <FloorPlanBackground scale={scale} />
+          {tables.map(t => {
+            const stl = tableStyle(t.status);
+            const isBar = t.label.startsWith('B');
+            const tw = (Number(t.width) || 80) * scale;
+            const th = (Number(t.height) || 80) * scale;
+            const px = (Number(t.pos_x) || 0) * scale;
+            const py = (Number(t.pos_y) || 0) * scale;
+            const fontSize = Math.max(8, Math.min(tw, th) * 0.35);
+            return (
+              <Pressable
+                key={t.id}
+                onPress={() => handleTablePress(t)}
+                style={{
+                  position: 'absolute',
+                  left: px,
+                  top: py,
+                  width: tw,
+                  height: th,
+                  borderRadius: t.shape === 'round' ? tw / 2 : Math.max(4, s(8)),
+                  borderWidth: Math.max(1.5, s(2)),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: stl.backgroundColor,
+                  borderColor: stl.borderColor,
+                  opacity: (stl as any).opacity ?? 1,
+                }}
+              >
+                <Text style={{ fontWeight: 'bold', fontSize, color: '#111827', textAlign: 'center', includeFontPadding: false }}>
+                  {t.label}
+                </Text>
+                {t.status === 'occupied' && !!t.daily_number && (
+                  <Text style={{ fontSize: Math.max(6, fontSize * 0.55), color: '#374151', marginTop: 1, includeFontPadding: false }}>
+                    #{t.daily_number}
+                  </Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
         {tables.length === 0 && (
           <Text className="text-ink-muted text-center py-12">Sin mesas en este piso</Text>
         )}
-        <Text className="text-ink-muted text-[10px] text-center mt-2 px-4">
-          Desliza horizontal y vertical para ver todo el mapa.
+        <Text className="text-ink-muted text-[10px] text-center mt-3 px-4">
+          Toca una mesa para tomar el pedido. Color del borde = estado.
         </Text>
       </ScrollView>
     </View>
