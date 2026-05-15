@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
-import { Zap, LogOut, DoorOpen, Coffee, Bath, Flame, Snowflake, RefreshCw, ReceiptText } from 'lucide-react-native';
+import { Zap, LogOut, DoorOpen, Coffee, Bath, Flame, Snowflake, RefreshCw, ReceiptText, Wrench } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Updates from 'expo-updates';
 import { useAuth } from '../context/AuthContext';
@@ -201,6 +201,16 @@ export default function TablesScreen({ navigation }: Props) {
           <Text className="text-ink-muted text-xs">{user?.display_name}</Text>
         </View>
         <View className="flex-row gap-2">
+          {/* Modo Admin — solo admin/manager */}
+          {(user?.role === 'admin' || user?.role === 'manager') && (
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); navigation.navigate('AdminPanel'); }}
+              style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+              className="bg-bg-card border border-bg-border px-3 py-2 rounded-xl"
+            >
+              <Wrench size={16} color="#A78BFA" />
+            </Pressable>
+          )}
           {/* Scanner de tickets — solo admin/manager (Eve y dueño) */}
           {(user?.role === 'admin' || user?.role === 'manager') && (
             <Pressable

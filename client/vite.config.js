@@ -1,9 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { readFileSync } from 'fs';
+var desktopPkg = JSON.parse(readFileSync(path.resolve(__dirname, '../desktop/package.json'), 'utf8'));
 export default defineConfig({
     base: './',
     plugins: [react()],
+    define: {
+        __APP_VERSION__: JSON.stringify(desktopPkg.version),
+    },
     resolve: {
         alias: {
             '@': path.resolve(__dirname, './src'),

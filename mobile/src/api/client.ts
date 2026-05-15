@@ -298,6 +298,23 @@ export async function scanSupplierTicket(imageBase64: string): Promise<ScannedTi
   return res.data;
 }
 
+// ─── Diagnóstico (modo admin) ───
+export interface Diagnostics {
+  server: { uptime_sec: number; node_env: string; node_version: string; tenant_id?: string; memory_mb: any; load_avg_1m: number; cpu_count: number; now_iso: string };
+  db: { ok: boolean; latency_ms: number };
+  integrations: { openai: boolean; openclaw: boolean; banregio: boolean; mercadolibre: boolean };
+  last_client_error: any;
+}
+
+export async function getDiagnostics(): Promise<Diagnostics> {
+  const res = await api.get('/diagnostics');
+  return res.data;
+}
+
+export async function reportProblem(payload: any): Promise<void> {
+  await api.post('/diagnostics/report', payload);
+}
+
 export async function openShift(startingCash: number, notes?: string): Promise<Shift> {
   const res = await api.post('/shifts/open', { starting_cash: startingCash, notes: notes || undefined });
   return res.data;

@@ -168,6 +168,7 @@ export default function MainLayout() {
       roles: ['admin'],
       items: [
         { label: 'Herramientas', to: '/maintenance', offlineDisabled: true },
+        { label: 'Modo Admin (diagnóstico)', to: '/admin-panel', offlineDisabled: false },
       ],
     },
   ];

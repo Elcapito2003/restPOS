@@ -55,6 +55,7 @@ import ProduccionesPage from './pages/ProduccionesPage';
 import HuellasPage from './pages/HuellasPage';
 import RelojChecadorPage from './pages/RelojChecadorPage';
 import AsistenciaPage from './pages/AsistenciaPage';
+import AdminPanelPage from './pages/AdminPanelPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -152,6 +153,7 @@ export default function App() {
                 <Route path="/security" element={<R roles={['admin']}><SecurityPage /></R>} />
                 <Route path="/huellas" element={<R roles={['admin','manager']}><HuellasPage /></R>} />
                 <Route path="/asistencia" element={<R roles={['admin','manager']}><AsistenciaPage /></R>} />
+                <Route path="/admin-panel" element={<R roles={['admin','manager']}><AdminPanelPage /></R>} />
 
                 {/* Configuración */}
                 <Route path="/settings" element={<R roles={['admin']}><SettingsPage /></R>} />

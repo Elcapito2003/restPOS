@@ -13,6 +13,7 @@ import TablesScreen from './src/screens/TablesScreen';
 import OrderScreen from './src/screens/OrderScreen';
 import MenuScreen from './src/screens/MenuScreen';
 import ScanTicketScreen from './src/screens/ScanTicketScreen';
+import AdminPanelScreen from './src/screens/AdminPanelScreen';
 import ShiftGate from './src/components/ShiftGate';
 import { toastConfig } from './src/components/ui/Toast';
 import type { RootStackParamList } from './src/navigation/types';
@@ -43,6 +44,7 @@ function AppContent() {
           <Stack.Screen name="Order" component={OrderScreen} />
           <Stack.Screen name="Menu" component={MenuScreen} />
           <Stack.Screen name="ScanTicket" component={ScanTicketScreen} />
+          <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </ShiftGate>

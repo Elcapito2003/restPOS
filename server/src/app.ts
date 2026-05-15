@@ -34,6 +34,7 @@ import agentRoutes from './modules/agent/routes';
 import productionRoutes from './modules/productions/routes';
 import productRecipeRoutes from './modules/productRecipes/routes';
 import attendanceRoutes from './modules/attendance/routes';
+import diagnosticsRoutes from './modules/diagnostics/routes';
 
 const app = express();
 
@@ -137,6 +138,7 @@ app.use('/api/agent', agentRoutes);
 app.use('/api/productions', productionRoutes);
 app.use('/api/product-recipes', productRecipeRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/diagnostics', diagnosticsRoutes);
 
 app.use(errorHandler);
 
