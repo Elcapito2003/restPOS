@@ -40,4 +40,13 @@ router.get('/reception/history', ctrl.getOrdersHistory);
 router.post('/orders/:id/receive', ctrl.receiveOrder);
 router.post('/orders/:id/pay', ctrl.payOrder);
 
+// Scanner de tickets de proveedor (OpenAI gpt-4o-mini vision). Acepta una
+// imagen en base64, devuelve los datos extraídos. NO guarda nada — solo
+// extrae. El cliente decide qué hacer con el resultado.
+router.post('/scan-ticket', ctrl.scanTicket);
+
+// Body parser default es ~100kb; necesitamos más para imágenes en base64.
+// (Esto está OK porque Express tiene body parser global en app.ts; lo dejo
+// como nota para que no se olvide subir el limit si hace falta.)
+
 export default router;

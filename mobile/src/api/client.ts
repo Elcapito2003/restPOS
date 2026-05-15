@@ -273,6 +273,31 @@ export async function getOpenShifts(): Promise<Array<Shift & { display_name: str
   return res.data || [];
 }
 
+// ─── Scanner de tickets de proveedor (OpenAI Vision) ───
+export interface ScannedTicket {
+  supplier_name: string | null;
+  supplier_rfc: string | null;
+  ticket_number: string | null;
+  date: string | null;
+  items: Array<{
+    description: string;
+    quantity: number;
+    unit: string | null;
+    unit_price: number;
+    total: number;
+  }>;
+  subtotal: number | null;
+  tax: number | null;
+  total: number;
+  payment_method: 'cash' | 'card' | 'transfer' | 'credit' | null;
+  notes: string | null;
+}
+
+export async function scanSupplierTicket(imageBase64: string): Promise<ScannedTicket> {
+  const res = await api.post('/purchasing/scan-ticket', { image: imageBase64 });
+  return res.data;
+}
+
 export async function openShift(startingCash: number, notes?: string): Promise<Shift> {
   const res = await api.post('/shifts/open', { starting_cash: startingCash, notes: notes || undefined });
   return res.data;

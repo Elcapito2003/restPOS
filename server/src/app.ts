@@ -73,8 +73,9 @@ app.use(cors({
 // Rate limiting
 app.use(globalLimiter);
 
-// Body parsing with size limit
-app.use(express.json({ limit: '1mb' }));
+// Body parsing with size limit. 12mb para soportar imágenes en base64 del
+// scanner de tickets (foto del Samsung en buena calidad pesa ~5-8 MB).
+app.use(express.json({ limit: '12mb' }));
 
 // Trust proxy (behind nginx)
 app.set('trust proxy', 1);

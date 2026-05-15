@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import * as service from './service';
 import { getOpenClawStatus } from './openclaw';
+import { scanTicketImage } from './ticketScanner';
 
 export async function getOrders(req: Request, res: Response) {
   const status = req.query.status as string | undefined;
@@ -101,5 +102,21 @@ export async function payOrder(req: Request, res: Response) {
     res.json(order);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
+  }
+}
+
+export async function scanTicket(req: Request, res: Response) {
+  try {
+    const { image } = req.body || {};
+    if (!image || typeof image !== 'string') {
+      return res.status(400).json({ error: 'Falta image (base64) en el body' });
+    }
+    if (image.length > 10_000_000) {
+      return res.status(413).json({ error: 'Imagen demasiado grande (max ~7MB)' });
+    }
+    const parsed = await scanTicketImage(image);
+    res.json(parsed);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error al escanear ticket' });
   }
 }
